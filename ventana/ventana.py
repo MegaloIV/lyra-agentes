@@ -74,8 +74,11 @@ class Ventana(Gtk.Application):
         ventana.set_child(vista)
         ventana.add_css_class("lyra-transparente")
         css = Gtk.CssProvider()
-        # Por encima del gtk.css del usuario (prioridad USER), que suele pintar `.background` de un color sólido
-        css.load_from_string("window.lyra-transparente, window.lyra-transparente.background { background: none; background-color: transparent; }")
+        # Por encima del gtk.css del usuario (prioridad USER), que suele pintar `.background` de un color sólido.
+        # backdrop-filter le pide al compositor que desenfoque lo de atrás: GTK 4.24 usa el protocolo
+        # ext-background-effect y, si no declara una zona, Hyprland entiende que la app no quiere desenfoque.
+        css.load_from_string("window.lyra-transparente, window.lyra-transparente.background"
+                             " { background: none; background-color: transparent; backdrop-filter: blur(20px); }")
         Gtk.StyleContext.add_provider_for_display(ventana.get_display(), css, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
         teclas = Gtk.EventControllerKey()
         teclas.connect("key-pressed", self.al_tecla)

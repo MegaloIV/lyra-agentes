@@ -879,16 +879,22 @@ body.arrastrando iframe { pointer-events: none; }
 .proyecto-titulo { text-transform: none; letter-spacing: 0; font-size: .82rem; font-weight: 500; color: var(--texto); }
 
 /* Visor: páginas de PDF y Word, video y audio, «Abrir con…» */
-.paginas-barra { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: .1rem; padding: .25rem .5rem; background: var(--fondo-hondo); border-bottom: 1px solid var(--borde); }
+/* La barra queda fuera de lo que se desplaza: al ampliar, la hoja se mueve y la barra no */
+.paginas-marco { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.paginas-scroll { flex: 1; min-height: 0; overflow: auto; background: #2a2b29; }
+.paginas-barra { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: .1rem; padding: .25rem .5rem; background: var(--fondo-hondo); border-bottom: 1px solid var(--borde); }
 .paginas-info { margin-right: auto; font-size: .74rem; color: var(--tenue); }
 .paginas-zoom { all: unset; cursor: pointer; font: .74rem var(--mono); color: var(--tenue); min-width: 2.8rem; text-align: center; border-radius: 4px; padding: .1rem .2rem; }
 .paginas-zoom:hover { color: var(--texto); background: var(--superficie); }
 .paginas { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px; background: #2a2b29; min-width: min-content; }
 .pdf-pagina { background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .45); flex: none; }
 .pdf-pagina canvas { display: block; }
-.paginas-docx { display: block; background: #2a2b29; }
-.paginas-docx .docx-wrapper { background: transparent; padding: 0; }
-.paginas-docx .docx-wrapper > section.docx { box-shadow: 0 2px 12px rgba(0, 0, 0, .45); margin: 0 auto 12px; }
+/* Word: la caja ocupa lo que mide la hoja ya escalada (transform no cambia el tamaño en la página) */
+.paginas-docx { padding: 12px; }
+.docx-caja { margin: 0 auto; overflow: hidden; }
+.docx-hojas { width: max-content; transform-origin: 0 0; }
+.paginas-docx .docx-wrapper { background: transparent; padding: 0; display: block; }
+.paginas-docx .docx-wrapper > section.docx { box-shadow: 0 2px 12px rgba(0, 0, 0, .45); margin: 0 0 12px; }
 .visor-medio { flex: 1; display: grid; place-items: center; padding: .8rem; background: #000; }
 .visor-medio video { max-width: 100%; max-height: 100%; }
 .visor-medio audio { width: 100%; }
@@ -899,17 +905,18 @@ body.arrastrando iframe { pointer-events: none; }
 
 /* ───────── En la ventana propia: cada zona pone su transparencia ─────────
    La ventana GTK es transparente y Hyprland no le pone opacidad propia (ver el README): la barra de la izquierda
-   deja ver el escritorio (90 %) y la lectura, el índice y el visor mucho menos (96 %). Sin foco, Hyprland baja toda la
+   deja ver el escritorio (90 %) y la lectura, el índice y el visor, más oscuros, también al 90 %. Lo de atrás se ve
+   desenfocado (el compositor lo hace; la ventana lo pide con backdrop-filter). Sin foco, Hyprland baja toda la
    ventana un poco más (regla `opacity = "1.0 override 0.85 override"`).
    En una ventana angosta la barra es un cajón translúcido: el texto de debajo se esconde y se ve el escritorio. */
-:root { --opacidad-barra: .9; --opacidad-lectura: .96; --ancho-cajon: min(17rem, 85vw); }
+:root { --opacidad-barra: .9; --opacidad-lectura: .9; --ancho-cajon: min(17rem, 85vw); }
 html[data-ventana] body { background: transparent; }
-html[data-ventana] .lectura { background: rgb(28 29 27 / var(--opacidad-lectura)); }
+html[data-ventana] .lectura { background: rgb(17 18 16 / var(--opacidad-lectura)); }
 /* Dentro de la lectura, lo que pintaba el mismo fondo sólido queda sin fondo (ya lo pone la lectura) */
 html[data-ventana] .lectura-cabecera { background: transparent; }
 html[data-ventana] .redactor { background: none; }
-html[data-ventana] .turno-hora { background: rgb(28 29 27); border-radius: 4px; }
-html[data-ventana] .panel { background: rgb(23 24 22 / var(--opacidad-lectura)); }
+html[data-ventana] .turno-hora { background: rgb(17 18 16); border-radius: 4px; }
+html[data-ventana] .panel { background: rgb(13 14 12 / var(--opacidad-lectura)); }
 html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra)); }
 @media (max-width: 760px) {
   html[data-ventana] .agentes { width: var(--ancho-cajon); box-shadow: none; }

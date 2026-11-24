@@ -67,17 +67,19 @@ export function Pdf({ datos }: { datos: Blob }) {
     return () => { vivo = false; obs?.disconnect(); destruir(); };
   }, [datos, zoom]);
   return (
-    <>
+    <div class="paginas-marco">
       <Zoom zoom={zoom} setZoom={setZoom} extra={info} />
       {error && <p class="visor-nota" data-nivel="error">{error}</p>}
-      <div ref={ref} class="paginas" />
-    </>
+      <div class="paginas-scroll"><div ref={ref} class="paginas" /></div>
+    </div>
   );
 }
 
-/** Word (.docx): docx-preview arma las páginas en HTML; se ajustan al ancho del panel */
+/** Word (.docx): docx-preview arma las páginas en HTML con su tamaño real y se escalan como una imagen
+ *  (transform), para que el texto no se vuelva a acomodar; el 100 % ajusta la hoja al ancho del panel */
 export function Docx({ datos }: { datos: Blob }) {
   const ref = useRef<HTMLDivElement>(null);
+  const caja = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [error, setError] = useState('');
   const [listo, setListo] = useState(false);
@@ -91,20 +93,26 @@ export function Docx({ datos }: { datos: Blob }) {
     return () => { vivo = false; };
   }, [datos]);
   useEffect(() => {
-    const cont = ref.current!, ajustar = () => {
+    const cont = ref.current!, marco = caja.current!, scroll = marco.parentElement!;
+    const ajustar = () => {
       const hoja = cont.querySelector<HTMLElement>('section.docx');
       if (!hoja) return;
-      cont.style.setProperty('zoom', String((cont.parentElement!.clientWidth - 24) / (hoja.offsetWidth || 1) * zoom));
+      const escala = Math.max(0.05, (scroll.clientWidth - 24) / (hoja.offsetWidth || 1)) * zoom;
+      cont.style.transform = `scale(${escala})`;
+      marco.style.width = `${cont.offsetWidth * escala}px`;
+      marco.style.height = `${cont.offsetHeight * escala}px`;
     };
     ajustar();
-    const obs = new ResizeObserver(ajustar); obs.observe(cont.parentElement!);
+    const obs = new ResizeObserver(ajustar); obs.observe(scroll); obs.observe(cont);
     return () => obs.disconnect();
   }, [listo, zoom]);
   return (
-    <>
+    <div class="paginas-marco">
       <Zoom zoom={zoom} setZoom={setZoom} />
       {error && <p class="visor-nota" data-nivel="error">{error}</p>}
-      <div ref={ref} class="paginas paginas-docx" />
-    </>
+      <div class="paginas-scroll paginas-docx">
+        <div ref={caja} class="docx-caja"><div ref={ref} class="docx-hojas" /></div>
+      </div>
+    </div>
   );
 }

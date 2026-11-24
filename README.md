@@ -73,7 +73,7 @@ Variables de entorno; también se pueden escribir, una por línea, en `~/.config
 | `LYRA_AGENTES_TERMINAL` | Terminal para «Abrir terminal aquí» (si no, `$TERMINAL` o la primera instalada). |
 | `LYRA_AGENTES_GPU` | Si tiene algún valor, la ventana no fuerza la tarjeta integrada en equipos con dos. |
 
-**Transparencia:** en la ventana propia, la barra de la izquierda es translúcida (90 %) y la lectura, el índice y el visor casi opacos (96 %); sin foco, el compositor baja toda la ventana a 85 %. Si tu compositor le pone opacidad a todas las ventanas, quítasela a esta (dejando solo una baja cuando no tiene el foco) para que no se sume. En Hyprland:
+**Transparencia:** en la ventana propia, la barra de la izquierda y la lectura, el índice y el visor (más oscuros) son translúcidos (90 %), con el fondo desenfocado; sin foco, el compositor baja toda la ventana a 85 %. El desenfoque lo hace el compositor: la ventana lo pide con `backdrop-filter` (GTK 4.24 o más nuevo, protocolo `ext-background-effect`). Si tu compositor le pone opacidad a todas las ventanas, quítasela a esta (dejando solo una baja cuando no tiene el foco) para que no se sume. En Hyprland:
 
 ```lua
 hl.window_rule({ name = "lyra_agentes", match = { class = "^(io\\.lyra\\.Agentes)$" }, opacity = "1.0 override 0.85 override" })
