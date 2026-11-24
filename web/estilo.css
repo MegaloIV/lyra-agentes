@@ -957,16 +957,16 @@ html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra));
 .desplegable-pestanas button:hover { background: var(--superficie-2); }
 .desplegable-pestanas button[aria-pressed="true"] { background: var(--lima-suave); color: var(--lima); }
 .explorador { display: flex; flex-direction: column; min-height: 0; }
-.explorador-ruta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .05rem; padding: .15rem .2rem .3rem; font: .76rem var(--mono); }
+.explorador-ruta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .05rem; padding: .2rem .2rem .45rem; font: .76rem var(--mono); }
 .explorador-ruta button { border: 0; background: none; color: var(--apagado); padding: .1rem .25rem; border-radius: 4px; font: inherit; }
 .explorador-ruta button:hover { background: var(--superficie-2); color: var(--texto); }
 .explorador-ruta button[aria-current="true"] { color: var(--lima); }
 .explorador-subir { font-size: .95rem !important; line-height: 1; margin-right: .15rem; }
 .explorador-sep { color: var(--tenue); }
-.explorador-lista { display: flex; flex-direction: column; overflow-y: auto; max-height: 14rem; }
+.explorador-lista { display: flex; flex-direction: column; gap: .1rem; overflow-y: auto; max-height: 16rem; padding: .15rem 0; }
 .explorador-lista > button {
-  display: flex; align-items: center; gap: .5rem; border: 0; background: none; text-align: left; color: var(--texto);
-  padding: .3rem .6rem; border-radius: var(--radio-chico); font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; flex: none; align-items: center; gap: .5rem; border: 0; background: none; text-align: left; color: var(--texto);
+  padding: .42rem .7rem; border-radius: var(--radio-chico); font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .explorador-lista > button svg { flex: none; color: var(--amarillo); }
 .explorador-lista > button:hover { background: var(--superficie-2); }
