@@ -92,6 +92,9 @@ export async function historialCodex(): Promise<Sesion[]> {
     cwd: cadena(t.cwd), modificado: (Number(t.updatedAt) || 0) * 1000, rama: cadena(objeto(t.gitInfo).branch) || undefined }));
 }
 
+export async function archivarCodex(threadId: string) { await (await conexion()).pedir('thread/archive', { threadId }); }
+export async function renombrarCodex(threadId: string, name: string) { await (await conexion()).pedir('thread/name/set', { threadId, name }); }
+
 export async function cargarCodex(threadId: string, cwd: string): Promise<Bloque[]> {
   const c = await conexion();
   const r = await c.pedir<P>('thread/read', { threadId, includeTurns: true });

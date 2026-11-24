@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +24,12 @@ const clientes = new Map<WebSocket, { visible: boolean; fecha: number; agente?: 
 const enviar = (ws: WebSocket, m: ServidorMensaje) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
 const emitir = (m: ServidorMensaje) => { for (const ws of clientes.keys()) enviar(ws, m); };
 const visible = () => [...clientes.values()].some(c => c.visible && Date.now() - c.fecha < 2000);
-const gestor = new GestorAgentes(emitir, crearNotificador(visible), id => [...clientes.values()].some(c => c.agente === id && c.visible && Date.now() - c.fecha < 2000));
+// Tocar la notificación: abre (o trae al frente) la ventana y muestra ese agente
+const lanzador = fileURLToPath(new URL('../bin/lyra-agentes', import.meta.url));
+const alAbrir = (id: string) => {
+  execFile(lanzador, [], () => { execFile('hyprctl', ['dispatch', 'focuswindow', 'class:io.lyra.Agentes'], () => {}); setTimeout(() => emitir({ t: 'enfocar', agente: id }), 600); });
+};
+const gestor = new GestorAgentes(emitir, crearNotificador(visible, alAbrir), id => [...clientes.values()].some(c => c.agente === id && c.visible && Date.now() - c.fecha < 2000));
 const mandarCatalogo = async (fresco = false) => emitir({ t: 'catalogo', proveedores: await catalogo(fresco) });
 avisarCuota(() => void mandarCatalogo(true).catch(() => {}));
 void catalogo().catch(() => {});   // se arma al arrancar para que el diálogo lo tenga listo
@@ -67,6 +73,11 @@ servidor.on('upgrade', (req, socket, head) => {
           case 'catalogo': enviar(ws, { t: 'catalogo', proveedores: await catalogo(true) }); break;
           case 'abrir': await abrirCon(m.con, m.cwd); break;
           case 'historial': emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
+          case 'borrar': {
+            const r = await gestor.borrar(m);
+            emitir({ t: 'borrada', sessionId: r.sessionId, agente: m.agente }); emitir({ t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'aviso', texto: r.texto }); break;
+          }
+          case 'renombrar': await gestor.renombrar(m); emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'elegirCarpeta': emitir({ t: 'carpeta', ruta: await elegirCarpeta() }); break;
         }
       } catch (e) { enviar(ws, { t: 'error', texto: e instanceof Error ? e.message : 'Ocurrió un error inesperado.' }); }

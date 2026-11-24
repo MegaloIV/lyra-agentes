@@ -1,7 +1,9 @@
 import { render } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks';
 import './estilo.css';
-import { estado, suscribir, elegir, enviar } from './tienda.ts';
+import { estado, suscribir, elegir, enviar, avisar, pedirBorrar, renombrar } from './tienda.ts';
+import type { Objetivo } from './tienda.ts';
+import { Confirmar, TituloEditable } from './componentes/Acciones.tsx';
 import { Barra } from './componentes/Barra.tsx';
 import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Documento.tsx';
 import { Redactor } from './componentes/Redactor.tsx';
@@ -140,7 +142,7 @@ function App() {
 
   useEffect(() => { try { localStorage.setItem('lyra-indice', indiceAncho ? '1' : '0'); } catch {} }, [indiceAncho]);
   useEffect(() => { document.title = v ? `${titulo} · Lyra` : 'Lyra'; }, [titulo, !!v]);
-  useEffect(() => { setMenu(''); }, [claveDoc]);
+  useEffect(() => { setMenu(''); if (estado.editando === 'cabecera') estado.editando = null; }, [claveDoc]);
 
   // Atajos de teclado
   useEffect(() => {
@@ -149,6 +151,7 @@ function App() {
       if ((e.ctrlKey && e.key.toLowerCase() === 'n') || (e.altKey && e.key.toLowerCase() === 'n')) { e.preventDefault(); setDialogo(true); return; }
       if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); window.dispatchEvent(new Event('lyra-enfocar')); return; }
       if (e.ctrlKey && e.key.toLowerCase() === 'i') { e.preventDefault(); setIndice(x => !x); return; }
+      if (e.key === 'F2' && estado.vista) { e.preventDefault(); estado.editando = 'cabecera'; avisar(); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
         const lista = [...document.querySelectorAll<HTMLElement>('.agentes .agente')];
@@ -179,6 +182,12 @@ function App() {
     { texto: 'Guardar como Markdown', al: () => guardarArchivo(nombreArchivo(titulo), exportar()) },
     { texto: 'Copiar como Markdown', al: () => void navigator.clipboard.writeText(exportar()) },
   ];
+  const objetivo: Objetivo | undefined = agente ? { proveedor, titulo, agente: agente.id, sessionId: agente.sessionId, cwd, trabajando: agente.estado === 'trabajando' }
+    : v?.tipo === 'sesion' ? { proveedor, titulo, sessionId: v.sessionId, cwd } : undefined;
+  if (objetivo) opcionesMas.push(
+    { texto: 'Renombrar… (F2)', al: () => { estado.editando = 'cabecera'; avisar(); } },
+    { texto: 'Borrar conversación', al: () => pedirBorrar(objetivo) },
+  );
   const recientes = estado.historial.slice(0, 5);
 
   return (
@@ -195,7 +204,9 @@ function App() {
             <header class="lectura-cabecera">
               <button class="boton-menu" title="Agentes" onClick={() => setCajon(x => !x)}>☰</button>
               <div class="lectura-titulos">
-                <h1 class="lectura-titulo" title={titulo}>{titulo}</h1>
+                <h1 class="lectura-titulo" title={`${titulo}\nDoble clic o F2 para renombrar`}>
+                  {objetivo ? <TituloEditable clave="cabecera" titulo={titulo} clase="lectura-titulo-texto" onGuardar={t => renombrar(objetivo, t)} /> : titulo}
+                </h1>
                 <span class="lectura-ruta">{rutaCorta(cwd)}{sesion && !agente ? ` · ${haceCuanto(sesion.modificado)}` : ''}</span>
               </div>
               <div class="chips">
@@ -252,10 +263,11 @@ function App() {
           </>
         )}
         {estado.errores.length > 0 && (
-          <div class="errores" role="alert">{estado.errores.map(e => <p key={e.id}>{e.texto}</p>)}</div>
+          <div class="errores" role="alert">{estado.errores.map(e => <p key={e.id} data-nivel={e.nivel}>{e.texto}</p>)}</div>
         )}
       </main>
       {v && <Indice entradas={entradas.lista} activo={entradas.activo} onIr={id => { setIrA(x => ({ id, vez: x.vez + 1 })); if (angosto) setIndiceAngosto(false); }} />}
+      <Confirmar />
       <DialogoNuevo abierto={dialogo} carpetaInicial={rutaCorta(agente?.cwd || (v?.tipo === 'sesion' ? v.cwd : '') || estado.agentes[0]?.cwd || estado.historial[0]?.cwd || '~/')} onCerrar={() => setDialogo(false)} />
       {cajon && <div class="cortina" onClick={() => setCajon(false)} />}
       {angosto && indiceAngosto && v && <div class="cortina cortina-indice" onClick={() => setIndiceAngosto(false)} />}

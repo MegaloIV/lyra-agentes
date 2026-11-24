@@ -13,6 +13,7 @@ const trazos: Record<string, string> = {
   skill: 'M8 1.8l1.8 3.9 4.2.5-3.1 2.9.8 4.2L8 11.2l-3.7 2.1.8-4.2L2 6.2l4.2-.5z',
   mcp: 'M6 2v3 M10 2v3 M4 5h8v3a4 4 0 0 1-8 0z M8 12v2.5',
   otro: 'M3 8h.1 M8 8h.1 M13 8h.1',
+  papelera: 'M2.5 4.5h11 M6 4.5V3h4v1.5 M4 4.5l.7 9h6.6l.7-9 M6.8 7v4.5 M9.2 7v4.5',
 };
 
 export function Icono({ nombre }: { nombre: string }) {

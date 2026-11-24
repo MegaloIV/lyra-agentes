@@ -1,6 +1,9 @@
 import { useState } from 'preact/hooks';
 import type { Proveedor, ResumenAgente, Sesion } from '@protocolo';
-import { estado, elegir, enviar } from '../tienda.ts';
+import { estado, elegir, enviar, avisar, pedirBorrar, renombrar } from '../tienda.ts';
+import type { Objetivo } from '../tienda.ts';
+import { TituloEditable } from './Acciones.tsx';
+import { Icono } from './iconos.tsx';
 import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from '../util.ts';
 
 const GRUPOS = [
@@ -9,16 +12,28 @@ const GRUPOS = [
   { clave: 'listos', titulo: 'Listos', estados: ['listo', 'cerrado'] },
 ] as const;
 
+/** ✎ y 🗑 de cada conversación (se ven al pasar el cursor o en la elegida) */
+function Acciones({ clave, objetivo }: { clave: string; objetivo: Objetivo }) {
+  return (
+    <span class="agente-acciones">
+      <button class="agente-accion" data-accion="renombrar" title="Renombrar (F2)" aria-label="Renombrar" onClick={e => { e.stopPropagation(); estado.editando = clave; avisar(); }}><Icono nombre="editar" /></button>
+      <button class="agente-accion" data-accion="borrar" title="Borrar la conversación" aria-label="Borrar" onClick={e => { e.stopPropagation(); pedirBorrar(objetivo); }}><Icono nombre="papelera" /></button>
+    </span>
+  );
+}
+
 function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; onElegir: () => void }) {
+  const objetivo: Objetivo = { proveedor: a.proveedor, titulo: a.titulo, agente: a.id, sessionId: a.sessionId, cwd: a.cwd, trabajando: a.estado === 'trabajando' };
   return (
     <li class="agente" data-estado={a.estado} data-proveedor={a.proveedor} aria-current={actual ? 'true' : undefined} onClick={onElegir}
       title={`${a.titulo}\n${nombreProveedor(a.proveedor)} · ${rutaCorta(a.cwd)}`}>
       <span class="agente-estado" />
       <div class="agente-texto">
-        <span class="agente-titulo">{a.titulo}</span>
+        <TituloEditable clave={`agente:${a.id}`} titulo={a.titulo} clase="agente-titulo" onGuardar={t => renombrar(objetivo, t)} />
         <span class="agente-meta"><span class="proveedor-marca" data-proveedor={a.proveedor}>{nombreProveedor(a.proveedor)}</span> {nombreCarpeta(a.cwd)} · {a.estado === 'esperando' ? 'espera tu respuesta' : a.estado === 'error' ? 'se detuvo' : haceCuanto(a.ultimaActividad)}</span>
       </div>
       {a.sinLeer && !actual && <span class="agente-sinleer" title="Terminó y no lo has visto" />}
+      <Acciones clave={`agente:${a.id}`} objetivo={objetivo} />
       <button class="agente-cerrar" title="Cerrar (la sesión queda en el historial)" onClick={e => { e.stopPropagation(); enviar({ t: 'cerrar', agente: a.id }); }}>×</button>
     </li>
   );
@@ -62,9 +77,10 @@ function Historial({ sesiones, onElegir }: { sesiones: Sesion[]; onElegir: () =>
                 title={s.titulo} onClick={() => { elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor }); onElegir(); }}>
                 <span class="agente-estado" />
                 <div class="agente-texto">
-                  <span class="agente-titulo">{s.titulo}</span>
+                  <TituloEditable clave={`sesion:${s.sessionId}`} titulo={s.titulo} clase="agente-titulo" onGuardar={t => renombrar({ proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd }, t)} />
                   <span class="agente-meta"><span class="proveedor-marca" data-proveedor={s.proveedor}>{nombreProveedor(s.proveedor)}</span> {haceCuanto(s.modificado)}{s.rama ? ` · ${s.rama}` : ''}</span>
                 </div>
+                <Acciones clave={`sesion:${s.sessionId}`} objetivo={{ proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd }} />
               </li>
             ))}
           </ul>

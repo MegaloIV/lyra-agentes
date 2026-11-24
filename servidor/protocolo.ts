@@ -36,7 +36,10 @@ export type ClienteMensaje =
   | { t: 'abrir'; con: 'antigravity' | 'terminal' | 'carpeta' | 'loginGemini'; cwd?: string }
   | { t: 'abrirSesion'; sessionId: string; cwd: string; proveedor?: Proveedor }
   | { t: 'reanudar'; sessionId: string; cwd: string; proveedor?: Proveedor; texto?: string }
-  | { t: 'foco'; visible: boolean };
+  | { t: 'foco'; visible: boolean }
+  /** Con `agente`, el agente abierto (se cierra antes); si no, una del historial */
+  | { t: 'borrar'; proveedor: Proveedor; sessionId?: string; agente?: string }
+  | { t: 'renombrar'; proveedor: Proveedor; sessionId?: string; agente?: string; cwd?: string; titulo: string };
 export type ServidorMensaje =
   | { t: 'agentes'; agentes: ResumenAgente[] }
   | { t: 'documento'; agente: string; bloques: Bloque[]; soloLectura?: boolean }
@@ -45,7 +48,10 @@ export type ServidorMensaje =
   | { t: 'comandos'; agente: string; comandos: Comando[] }
   | { t: 'carpeta'; ruta: string | null }
   | { t: 'catalogo'; proveedores: InfoProveedor[] }
-  | { t: 'error'; texto: string };
+  | { t: 'error'; texto: string }
+  | { t: 'aviso'; texto: string }
+  | { t: 'borrada'; sessionId?: string; agente?: string }
+  | { t: 'enfocar'; agente: string };
 export function aplicarOps(bloques: Bloque[], ops: Op[]): Bloque[] {
   const salida = [...bloques];
   for (const op of ops) {

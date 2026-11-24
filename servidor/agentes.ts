@@ -9,6 +9,7 @@ import { MotorClaude, cargarClaude, historialClaude, tituloClaude } from './clau
 import { MotorCodex, cargarCodex, historialCodex } from './codex.ts';
 import { MotorGemini, cargarGemini, historialGemini } from './gemini.ts';
 import { instalado } from './motor.ts';
+import { borrarSesion, renombrarSesion } from './papelera.ts';
 
 export type { Agente };
 const NOMBRES: Record<Proveedor, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
@@ -108,6 +109,27 @@ export class GestorAgentes implements Contexto {
   }
 
   responder(r: Respuesta) { const p = this.obtener(r.agente).pendientes.get(r.solicitud); if (!p) throw new Error('La solicitud ya fue resuelta o cancelada.'); p.responder(r); }
+
+  /** Borra una conversación (la cierra antes si está abierta). Nunca es definitivo: ver papelera.ts */
+  async borrar(m: { proveedor: Proveedor; sessionId?: string; agente?: string }) {
+    let { proveedor, sessionId } = m;
+    const abierto = m.agente ? this.agentes.get(m.agente) : [...this.agentes.values()].find(a => a.sessionId === sessionId && a.proveedor === proveedor);
+    if (abierto) {
+      sessionId ||= abierto.sessionId; proveedor = abierto.proveedor;
+      this.cerrar(abierto.id);
+      if (sessionId) await new Promise(r => setTimeout(r, 400));   // que el proceso termine de escribir
+    }
+    if (!sessionId) return { texto: 'Agente cerrado: aún no tenía nada guardado.', sessionId };
+    return { texto: await borrarSesion(proveedor, sessionId), sessionId };
+  }
+
+  async renombrar(m: { proveedor: Proveedor; sessionId?: string; agente?: string; cwd?: string; titulo: string }) {
+    const titulo = m.titulo.trim().replace(/\s+/g, ' ').slice(0, 120);
+    const a = m.agente ? this.agentes.get(m.agente) : [...this.agentes.values()].find(x => x.sessionId === m.sessionId && x.proveedor === m.proveedor);
+    if (a) { a.titulo = titulo; this.barra(); }
+    const sessionId = m.sessionId || a?.sessionId;
+    if (sessionId) await renombrarSesion(a?.proveedor || m.proveedor, sessionId, titulo, m.cwd || a?.cwd);
+  }
 
   cerrar(id: string) {
     const a = this.obtener(id);

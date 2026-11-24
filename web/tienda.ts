@@ -15,7 +15,10 @@ export const estado = {
   catalogo: [] as InfoProveedor[],
   comandos: new Map<string, Comando[]>(),
   vista: null as Vista,
-  errores: [] as { id: number; texto: string }[],
+  errores: [] as { id: number; texto: string; nivel: 'error' | 'info' }[],
+  /** Qué título se está renombrando: `agente:<id>` o `sesion:<sessionId>` */
+  editando: null as string | null,
+  confirmar: null as { titulo: string; texto: string; boton: string; al: () => void } | null,
   carpeta: { ruta: null as string | null, vez: 0 },
   primeraLista: false,
 };
@@ -46,11 +49,40 @@ export function enviar(m: ClienteMensaje) {
   else mostrarError('Sin conexión con el servidor. Se reintentará en unos segundos.');
 }
 
-export function mostrarError(texto: string) {
+export function mostrarError(texto: string, nivel: 'error' | 'info' = 'error') {
   const id = ++numeroError;
-  estado.errores = [...estado.errores, { id, texto }].slice(-3);
+  estado.errores = [...estado.errores, { id, texto, nivel }].slice(-3);
   avisar();
-  setTimeout(() => { estado.errores = estado.errores.filter(e => e.id !== id); avisar(); }, 6000);
+  setTimeout(() => { estado.errores = estado.errores.filter(e => e.id !== id); avisar(); }, nivel === 'info' ? 3500 : 6000);
+}
+
+/** Una conversación: abierta (`agente`) o del historial (`sessionId`) */
+export type Objetivo = { proveedor: Proveedor; titulo: string; agente?: string; sessionId?: string; cwd?: string; trabajando?: boolean };
+
+export function pedirBorrar(o: Objetivo) {
+  const donde = o.proveedor === 'codex' ? 'Codex la archiva: deja de aparecer aquí y en Codex, pero no se pierde.'
+    : !o.sessionId && o.agente ? 'Todavía no tiene nada guardado.'
+    : 'Va a la papelera del escritorio: puedes recuperarla desde el gestor de archivos.';
+  estado.confirmar = {
+    titulo: '¿Borrar esta conversación?',
+    texto: `«${o.titulo}». ${o.trabajando ? 'El agente está trabajando y se va a detener. ' : o.agente ? 'Se cierra el agente. ' : ''}${donde}`,
+    boton: 'Borrar',
+    al: () => enviar({ t: 'borrar', proveedor: o.proveedor, sessionId: o.sessionId, agente: o.agente }),
+  };
+  avisar();
+}
+
+export function renombrar(o: Objetivo, titulo: string) {
+  estado.editando = null;
+  const limpio = titulo.trim();
+  if (limpio && limpio !== o.titulo) {
+    enviar({ t: 'renombrar', proveedor: o.proveedor, sessionId: o.sessionId, agente: o.agente, cwd: o.cwd, titulo: limpio });
+    const s = o.sessionId && estado.historial.find(x => x.sessionId === o.sessionId);   // se ve al instante
+    if (s) s.titulo = limpio;
+    const a = o.agente && estado.agentes.find(x => x.id === o.agente);
+    if (a) a.titulo = limpio;
+  }
+  avisar();
 }
 
 /** Crear o reanudar: el próximo documento de un agente que llegue pasa a ser la vista. */
@@ -110,6 +142,14 @@ function recibir(m: ServidorMensaje) {
     case 'comandos': estado.comandos.set(m.agente, m.comandos); break;
     case 'carpeta': estado.carpeta = { ruta: m.ruta, vez: estado.carpeta.vez + 1 }; break;
     case 'error': mostrarError(m.texto); break;
+    case 'aviso': mostrarError(m.texto, 'info'); break;
+    case 'borrada': {
+      if (m.sessionId) { estado.documentos.delete(m.sessionId); estado.historial = estado.historial.filter(s => s.sessionId !== m.sessionId); }
+      const v = estado.vista;
+      if (v && (v.tipo === 'sesion' ? v.sessionId === m.sessionId : v.id === m.agente)) elegir(null);
+      break;
+    }
+    case 'enfocar': if (estado.agentes.some(a => a.id === m.agente)) elegir({ tipo: 'agente', id: m.agente }); break;
   }
   avisar();
 }

@@ -757,3 +757,26 @@ button.chip:hover { border-color: var(--borde-fuerte); color: var(--texto); }
 }
 .historial-proveedores button[aria-pressed="true"] { color: var(--prov, var(--lima)); border-color: var(--prov, var(--lima)); }
 .historial-vacio { margin: .2rem .9rem; font-size: .8rem; color: var(--tenue); }
+
+/* Renombrar y borrar conversaciones */
+.agente-acciones { flex: none; display: flex; gap: 1px; }
+.agente-accion {
+  flex: none; display: grid; place-items: center; border: 0; background: none; color: var(--tenue);
+  width: 1.4rem; height: 1.4rem; border-radius: 4px; opacity: 0; cursor: pointer;
+}
+.agente-accion svg { width: 13px; height: 13px; }
+.agente:hover .agente-accion, .agente[aria-current="true"] .agente-accion, .agente-accion:focus-visible { opacity: 1; }
+.agente-accion:hover { background: var(--superficie-2); color: var(--texto); }
+.agente-accion[data-accion="borrar"]:hover { background: var(--rojo-suave); color: var(--rojo); }
+@media (hover: none) { .agente-accion { opacity: .7; } }
+.titulo-editando {
+  font: inherit; color: var(--texto-fuerte); background: var(--fondo); min-width: 0; width: 100%;
+  border: 1px solid rgba(184, 224, 74, .5); border-radius: 4px; padding: 0 .3rem; outline: 0;
+}
+.lectura-titulo.titulo-editando { font-size: inherit; }
+.lectura-titulo { cursor: text; }
+.dialogo-confirmar { width: min(26rem, calc(100% - 2rem)); }
+.dialogo-confirmar p { margin: 0; color: var(--apagado); line-height: 1.5; font-size: .92rem; }
+.boton-peligro-lleno { background: var(--rojo); color: #1c1d1b; border-color: var(--rojo); font-weight: 600; }
+.boton-peligro-lleno:hover { background: #ea8078; }
+.errores p[data-nivel="info"] { background: #1f2619; color: var(--lima); border-color: rgba(184, 224, 74, .3); }

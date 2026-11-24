@@ -48,12 +48,22 @@ export async function infoGemini(): Promise<InfoProveedor> {
   return { id: 'gemini', nombre: 'Gemini', instalado: esta, sesion: esta && geminiConSesion(), modelos: esta ? await listarModelos() : [], modos: MODOS_GEMINI };
 }
 
-type Registro = { sessionId: string; cwd: string; titulo: string; modificado: number };
+type Registro = { sessionId: string; cwd: string; titulo: string; modificado: number; renombrada?: boolean };
 async function leerRegistro(): Promise<Registro[]> { try { return JSON.parse(await readFile(REGISTRO, 'utf8')); } catch { return []; } }
 async function guardarEnRegistro(r: Registro) {
-  const lista = (await leerRegistro()).filter(x => x.sessionId !== r.sessionId);
+  const todas = await leerRegistro(), antes = todas.find(x => x.sessionId === r.sessionId);
+  if (antes?.renombrada) { r.titulo = antes.titulo; r.renombrada = true; }   // el nombre que le diste no se pisa
+  await escribirRegistro([r, ...todas.filter(x => x.sessionId !== r.sessionId)]);
+}
+async function escribirRegistro(lista: Registro[]) {
   await mkdir(DIR_ESTADO, { recursive: true, mode: 0o700 });
-  await writeFile(REGISTRO, JSON.stringify([r, ...lista].slice(0, 300)), { mode: 0o600 });
+  await writeFile(REGISTRO, JSON.stringify(lista.slice(0, 300)), { mode: 0o600 });
+}
+export async function quitarDeRegistro(sessionId: string) { await escribirRegistro((await leerRegistro()).filter(x => x.sessionId !== sessionId)); }
+export async function renombrarEnRegistro(sessionId: string, titulo: string) {
+  const lista = await leerRegistro(), r = lista.find(x => x.sessionId === sessionId);
+  if (!r) throw new Error('No se encontró esa conversación de Gemini.');
+  r.titulo = titulo; r.renombrada = true; await escribirRegistro(lista);
 }
 /** Gemini no lista sus sesiones por ACP: se guardan las que se abren desde aquí */
 export async function historialGemini(): Promise<Sesion[]> {

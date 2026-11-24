@@ -17,6 +17,9 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'interrumpir': case 'cerrar': case 'leer': case 'comandos': valido = texto('agente'); break;
     case 'modelo': valido = texto('agente') && (m.modelo === null || texto('modelo')); break;
     case 'modo': valido = texto('agente') && modos.includes(m.modo as PermissionMode); break;
+    case 'borrar': valido = proveedores.includes(String(m.proveedor)) && texto('sessionId', true) && texto('agente', true) && (!!m.sessionId || !!m.agente); break;
+    case 'renombrar': valido = proveedores.includes(String(m.proveedor)) && texto('sessionId', true) && texto('agente', true) && texto('cwd', true) && (!!m.sessionId || !!m.agente)
+      && typeof m.titulo === 'string' && m.titulo.trim().length > 0 && m.titulo.length <= 200; break;
     case 'responder': valido = texto('agente') && texto('solicitud') && ['permitir', 'siempre', 'rechazar'].includes(String(m.decision)) && texto('mensaje', true) && (m.respuestas === undefined || m.respuestas !== null && typeof m.respuestas === 'object' && !Array.isArray(m.respuestas) && Object.values(m.respuestas).every(v => typeof v === 'string')); break;
   }
   if (!valido) throw new Error('El mensaje recibido no es válido.');
