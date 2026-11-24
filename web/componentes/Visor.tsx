@@ -1,13 +1,13 @@
 // Visor del panel derecho: los archivos que el agente creó, editó, generó o nombró, y la vista de uno.
 // Muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas (pasadas a PDF con LibreOffice),
-// HTML (sin scripts) y código. «Abrir con…» elige otra app (OnlyOffice, VS Code…).
+// HTML (sin scripts) y código. «Abrir con…» elige otra app (OnlyOffice, VS Code…). La papelera lo manda a la del escritorio.
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Bloque } from '@protocolo';
-import { enviar, estado, leerArchivo, urlMedio, ver, avisar } from '../tienda.ts';
+import { enviar, estado, leerArchivo, urlMedio, ver, avisar, borrarArchivo, claveArchivo } from '../tienda.ts';
 import { Docx, Pdf } from './Paginas.tsx';
 import { renderizar } from '../md.ts';
 import { Codigo } from './Documento.tsx';
-import { BotonIcono, Desplegable } from './Acciones.tsx';
+import { BotonIcono, Desplegable, Papelera } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { lenguajeDe, nombreCarpeta, rutaCorta } from '../util.ts';
 
@@ -77,7 +77,7 @@ function AbrirCon({ ruta, cwd }: { ruta: string; cwd: string }) {
   );
 }
 
-function Vista({ ruta, cwd, firma }: { ruta: string; cwd: string; firma: number }) {
+function Vista({ ruta, cwd, firma, id }: { ruta: string; cwd: string; firma: number; id?: string }) {
   const [c, setC] = useState<Cargado>({ estado: 'cargando' });
   const [fuente, setFuente] = useState(false);
   const [vez, setVez] = useState(0);
@@ -102,7 +102,7 @@ function Vista({ ruta, cwd, firma }: { ruta: string; cwd: string; firma: number 
   const esMd = /\.(md|markdown)$/i.test(ruta), esHtml = /\.html?$/i.test(ruta);
   const html = useMemo(() => c.estado === 'listo' && esMd && c.texto !== undefined ? renderizar(c.texto, 'visor') : '', [c, esMd]);
   let cuerpo: preact.JSX.Element;
-  if (c.estado === 'cargando') cuerpo = <p class="visor-nota">{aPdf ? 'Preparando la vista (la primera vez tarda unos segundos)…' : 'Cargando…'}</p>;
+  if (c.estado === 'cargando') cuerpo = <p class="visor-nota">Cargando…</p>;
   else if (c.estado === 'error') cuerpo = (
     <div class="visor-nota" data-nivel="error">
       <p>{c.texto}</p>
@@ -132,6 +132,7 @@ function Vista({ ruta, cwd, firma }: { ruta: string; cwd: string; firma: number 
         {(esMd || esHtml) && <BotonIcono icono="codigo" titulo={fuente ? 'Ver como documento' : 'Ver el código'} activo={fuente} onClick={() => setFuente(x => !x)} />}
         <BotonIcono icono="recargar" titulo="Volver a cargar" onClick={() => setVez(x => x + 1)} />
         <AbrirCon ruta={ruta} cwd={cwd} />
+        <Papelera clase="icono-boton" titulo="Mandar a la papelera" onBorrar={() => borrarArchivo(ruta, cwd, id)} />
       </header>
       <div class="visor-cuerpo">{cuerpo}</div>
     </div>
@@ -139,22 +140,25 @@ function Vista({ ruta, cwd, firma }: { ruta: string; cwd: string; firma: number 
 }
 
 export function Visor({ bloques, cwd }: { bloques: Bloque[]; cwd: string }) {
-  const archivos = useMemo(() => archivosDe(bloques, cwd), [bloques, cwd]);
+  const todos = useMemo(() => archivosDe(bloques, cwd), [bloques, cwd]);
+  // Los que se mandaron a la papelera no se listan, salvo que el agente los haya vuelto a tocar después
+  const borrado = (a: ArchivoVisto) => { const k = claveArchivo(a.ruta, cwd); return estado.borrados.has(k) && estado.borrados.get(k) === a.id; };
+  const archivos = todos.filter(a => !borrado(a));
   const v = estado.visor;
   // Si el agente vuelve a tocar el archivo que se está viendo, se recarga solo
   const firma = v ? bloques.filter(b => b.tipo === 'herramienta' && b.estado === 'ok' && rutaDe(b.entrada).endsWith(v.ruta.replace(/^\.\//, ''))).length + v.vez * 1000 : 0;
-  if (v) return <Vista key={v.ruta} ruta={v.ruta} cwd={v.cwd} firma={firma} />;
+  if (v) return <Vista key={v.ruta} ruta={v.ruta} cwd={v.cwd} firma={firma} id={todos.find(a => a.ruta === v.ruta)?.id} />;
   return (
     <div class="visor-lista">
-      <h3 class="panel-titulo">Archivos de esta conversación</h3>
-      {!archivos.length && <p class="visor-nota">Aquí aparecen los documentos e imágenes que el agente cree, edite o te muestre. También puedes hacer clic en una ruta del texto.</p>}
+      <h3 class="panel-titulo">Archivos</h3>
       <ul>
         {archivos.map(a => (
           <li key={a.ruta}>
             <button type="button" class="visor-archivo" title={rutaCorta(a.ruta)} onClick={() => ver(a.ruta, cwd)}>
               <Icono nombre={iconoDe(a.ruta)} tam={14} />
-              <span class="visor-archivo-texto"><span>{a.ruta.split('/').pop()}</span><small>{a.como} · {carpetaDe(a.ruta, cwd)}</small></span>
+              <span class="visor-archivo-texto"><span>{a.ruta.split('/').pop()}</span><small>{carpetaDe(a.ruta, cwd)}</small></span>
             </button>
+            <Papelera clase="agente-accion visor-borrar" titulo="Mandar a la papelera" onBorrar={() => borrarArchivo(a.ruta, cwd, a.id)} />
           </li>
         ))}
       </ul>

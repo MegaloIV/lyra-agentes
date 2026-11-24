@@ -8,11 +8,12 @@ import type { ServidorMensaje } from './protocolo.ts';
 import { cargarToken, validarConexion, archivoPublico } from './seguridad.ts';
 import { validarMensaje } from './validar.ts';
 import { GestorAgentes } from './agentes.ts';
-import { elegirCarpeta } from './carpetas.ts';
+import { explorar } from './carpetas.ts';
 import { crearNotificador } from './notificar.ts';
 import { catalogo } from './catalogo.ts';
 import { abrirCon, abrirArchivo, aplicaciones } from './abrir.ts';
 import { leerArchivo, comoPdf, servirMedio } from './archivos.ts';
+import { borrarArchivo } from './papelera.ts';
 import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
 import { avisarCuota, cerrarCodex, limiteCodex } from './codex.ts';
 import { avisarUsoClaude } from './claude.ts';
@@ -104,6 +105,11 @@ servidor.on('upgrade', (req, socket, head) => {
           case 'abrir': await abrirCon(m.con, m.cwd); break;
           case 'abrirArchivo': await abrirArchivo(m.ruta, m.cwd, m.app); break;
           case 'aplicaciones': enviar(ws, { t: 'aplicaciones', ruta: m.ruta, apps: await aplicaciones(m.ruta, m.cwd) }); break;
+          case 'borrarArchivo': {
+            const real = await borrarArchivo(m.ruta, m.cwd);
+            emitir({ t: 'archivoBorrado', ruta: m.ruta, cwd: m.cwd, id: m.id });
+            enviar(ws, { t: 'aviso', texto: `«${real.split('/').pop()}» está en la papelera.` }); break;
+          }
           case 'guardarGrupos': emitir({ t: 'grupos', grupos: await guardarGrupos(m.grupos) }); break;
           case 'historial': emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'borrar': {
@@ -123,7 +129,7 @@ servidor.on('upgrade', (req, socket, head) => {
             break;
           }
           case 'renombrar': await gestor.renombrar(m); emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
-          case 'elegirCarpeta': emitir({ t: 'carpeta', ruta: await elegirCarpeta() }); break;
+          case 'explorar': enviar(ws, { t: 'explorado', pedida: m.ruta, ...await explorar(m.ruta) }); break;
         }
       } catch (e) { enviar(ws, { t: 'error', texto: e instanceof Error ? e.message : 'Ocurrió un error inesperado.' }); }
     });

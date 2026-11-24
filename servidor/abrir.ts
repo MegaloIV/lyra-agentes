@@ -1,5 +1,5 @@
-// Abrir la carpeta de un agente en otra app: una terminal o el gestor de archivos.
-import { spawn } from 'node:child_process';
+// Abrir la carpeta de un agente en otra app: una terminal o el gestor de archivos (también en un escritorio vacío).
+import { execFile, spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { resolve } from 'node:path';
@@ -41,12 +41,40 @@ function lanzar(comando: string, args: string[], cwd: string) {
   p.unref();
 }
 
-export async function abrirCon(con: 'terminal' | 'carpeta' | 'loginGemini', ruta?: string) {
+const salida = (cmd: string, args: string[]) => new Promise<string>(ok => execFile(cmd, args, { timeout: 3000 }, (e, o) => ok(e ? '' : String(o))));
+/** Gestores de archivos que saben abrir una ventana nueva aunque ya estén abiertos (si no, xdg-open abre una pestaña) */
+const VENTANA_NUEVA: Record<string, string[]> = {
+  'org.kde.dolphin.desktop': ['dolphin', '--new-window'], 'org.gnome.Nautilus.desktop': ['nautilus', '--new-window'],
+  'thunar.desktop': ['thunar'], 'nemo.desktop': ['nemo'], 'pcmanfm-qt.desktop': ['pcmanfm-qt'], 'caja-folder-handler.desktop': ['caja'],
+};
+const ventanas = async () => { try { return JSON.parse(await salida('hyprctl', ['clients', '-j'])) as { address: string }[]; } catch { return []; } };
+
+/** El gestor de archivos en una ventana nueva y, en Hyprland, en un escritorio vacío (y te lleva ahí) */
+async function carpetaAparte(cwd: string) {
+  const predeterminado = (await salida('xdg-mime', ['query', 'default', 'inode/directory'])).trim();
+  const [cmd, ...args] = VENTANA_NUEVA[predeterminado] || ['xdg-open'];
+  const hypr = !!process.env.HYPRLAND_INSTANCE_SIGNATURE && instalado('hyprctl');
+  const antes = new Set(hypr ? (await ventanas()).map(v => v.address) : []);
+  lanzar(cmd!, [...args, cwd], cwd);
+  if (!hypr) return;
+  // Se espera la ventana nueva (hasta 6 s) y se la manda a un escritorio vacío; la orden usa la sintaxis Lua de Hyprland 0.5x
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 200));
+    const nueva = (await ventanas()).find(v => !antes.has(v.address));
+    if (nueva && /^0x[0-9a-f]+$/i.test(nueva.address)) {
+      await salida('hyprctl', ['dispatch', `hl.dsp.window.move({workspace = "empty", follow = true, window = "address:${nueva.address}"})`]);
+      return;
+    }
+  }
+}
+
+export async function abrirCon(con: 'terminal' | 'carpeta' | 'carpetaAparte' | 'loginGemini', ruta?: string) {
   const cwd = ruta ? resolve(ruta.startsWith('~/') ? homedir() + ruta.slice(1) : ruta) : homedir();
   if (!(await stat(cwd).catch(() => null))?.isDirectory()) throw new Error('Esa carpeta ya no existe.');
   switch (con) {
     case 'terminal': return abrirTerminal(cwd);
     case 'carpeta': return lanzar('xdg-open', [cwd], cwd);
+    case 'carpetaAparte': void carpetaAparte(cwd).catch(() => {}); return;
     case 'loginGemini':
       // Gemini CLI interactivo: la primera vez pregunta cómo iniciar sesión (elegir «Sign in with Google»)
       return abrirTerminal(homedir(), ['gemini']);

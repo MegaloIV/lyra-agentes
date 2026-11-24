@@ -8,7 +8,7 @@ import type { Objetivo } from '../tienda.ts';
 import { BotonIcono, Desplegable, Papelera, TituloEditable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { Limites } from './Limites.tsx';
-import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from '../util.ts';
+import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta, tonoDe } from '../util.ts';
 
 const GRUPOS = [
   { clave: 'atencion', titulo: 'Te necesitan', estados: ['esperando', 'error'] },
@@ -158,7 +158,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
             if (q && !lista.length && !c.nombre.toLowerCase().includes(q)) return null;
             const abierta = c.abierta || !!q;
             return (
-              <div class="carpeta" key={c.id} data-abierta={String(abierta)} {...soltable(c.id, marcado, setMarcado)}>
+              <div class="carpeta" key={c.id} data-abierta={String(abierta)} style={{ '--tono': tonoDe(c.id) }} {...soltable(c.id, marcado, setMarcado)}>
                 <div class="carpeta-cabecera" role="button" tabIndex={0} onClick={() => alternarCarpeta(c.id)} onKeyDown={e => e.key === 'Enter' && alternarCarpeta(c.id)}>
                   <span class="carpeta-flecha" />
                   <Icono nombre="carpeta" tam={14} />
@@ -166,9 +166,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
                   <span class="grupo-cuenta">{lista.length}</span>
                   <span class="agente-acciones"><Papelera titulo="Borrar la carpeta (las conversaciones no se borran)" onBorrar={() => borrarCarpeta(c.id)} /></span>
                 </div>
-                {abierta && (lista.length
-                  ? <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} />)}</ul>
-                  : <p class="carpeta-vacia">Arrastra conversaciones aquí</p>)}
+                {abierta && lista.length > 0 && <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} />)}</ul>}
               </div>
             );
           })}
@@ -180,12 +178,14 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
           {proyectos.map(([cwd, lista], i) => {
             const ab = abierto(cwd, i);
             return (
-              <div key={cwd} class="tramo proyecto" data-abierto={String(ab)}>
+              <div key={cwd} class="tramo proyecto" data-abierto={String(ab)} style={{ '--tono': tonoDe(cwd) }}>
                 <h3 class="grupo-titulo tramo-titulo proyecto-titulo" title={rutaCorta(cwd)}>
                   <button type="button" class="tramo-boton" aria-expanded={ab} onClick={() => alternar(cwd, i)}>
                     <span class="carpeta-flecha" /><span class="proyecto-nombre">{nombreCarpeta(cwd)}</span> <span class="grupo-cuenta">{lista.length}</span>
                   </button>
                   <span class="agente-acciones">
+                    <button type="button" class="agente-accion" title="Abrir en otro escritorio" aria-label="Abrir la carpeta en otro escritorio"
+                      onClick={() => enviar({ t: 'abrir', con: 'carpetaAparte', cwd })}><Icono nombre="abrir" /></button>
                     <button type="button" class="agente-accion" title={`Agente nuevo en ${rutaCorta(cwd)}`} aria-label="Agente nuevo en esta carpeta"
                       onClick={() => { cambiarBorrador({ cwd }); onNuevo(); }}><Icono nombre="nuevo" /></button>
                     <Papelera titulo={`Borrar ${lista.length === 1 ? 'la conversación' : `las ${lista.length} conversaciones`} de esta carpeta (van a la papelera; la carpeta del disco no se toca)`}

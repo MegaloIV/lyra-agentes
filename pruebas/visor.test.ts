@@ -33,3 +33,15 @@ test('las carpetas propias descartan datos inválidos y sesiones huérfanas', ()
   assert.deepEqual(g, { carpetas: [{ id: 'a1', nombre: 'Trabajo', abierta: true }], sesiones: { s1: 'a1' } });
   assert.deepEqual(limpiarGrupos(null), { carpetas: [], sesiones: {} });
 });
+
+test('la papelera del visor solo acepta lo que el visor puede mostrar', async () => {
+  const { borrarArchivo } = await import('../servidor/papelera.ts');
+  await assert.rejects(borrarArchivo('/etc/hostname'), /Solo se muestran/);
+  await assert.rejects(borrarArchivo(join(homedir(), '.bashrc')), /ocultas|No encontré/);
+  const d = await mkdtemp(join(tmpdir(), 'lyra-visor-'));
+  await mkdir(join(d, 'sub'));
+  await assert.rejects(borrarArchivo('sub', d), /No es un archivo/);   // nunca carpetas enteras
+  await assert.rejects(borrarArchivo('no-existe.txt', d), /No encontré/);
+  await writeFile(join(d, 'nota.md'), 'x');
+  await assert.rejects(borrarArchivo('nota.md', d), /no tienen papelera/);
+});

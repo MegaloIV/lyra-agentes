@@ -34,9 +34,12 @@ export const estado = {
   panel: leerLocal<{ v: Panel }>('lyra-panel', { v: 'indice' }).v,
   /** Lo que muestra el visor (`vez` cambia al pedir el mismo archivo otra vez) */
   visor: null as { ruta: string; cwd: string; vez: number } | null,
+  /** Archivos que se mandaron a la papelera desde el visor → el bloque que los nombraba al borrarlos (si el agente los vuelve a tocar, reaparecen) */
+  borrados: new Map<string, string | undefined>(),
   /** Respuesta a «Abrir con…»: las apps que pueden abrir ese archivo */
   apps: null as { ruta: string; apps: { id: string; nombre: string; predeterminada?: boolean }[] } | null,
-  carpeta: { ruta: null as string | null, vez: 0 },
+  /** Lo que muestra el explorador de carpetas del chip «carpeta» (null mientras llega) */
+  explorado: null as { pedida: string; ruta: string; carpetas: string[]; recortado?: boolean; aviso?: string } | null,
   primeraLista: false,
 };
 
@@ -104,6 +107,13 @@ export function abrirPanel(p: Panel) {
   guardarLocal('lyra-panel', { v: p });
   avisar();
 }
+/** Pide las subcarpetas de una ruta para el explorador */
+export function explorar(ruta: string) { estado.explorado = null; enviar({ t: 'explorar', ruta }); }
+
+export const claveArchivo = (ruta: string, cwd = '') => `${cwd}\0${ruta}`;
+/** Manda un archivo a la papelera del escritorio (se recupera desde el gestor de archivos) */
+export function borrarArchivo(ruta: string, cwd: string, id?: string) { enviar({ t: 'borrarArchivo', ruta, cwd, id }); }
+
 /** Muestra un archivo en el visor (la ruta puede ser relativa a la carpeta del agente) */
 export function ver(ruta: string, cwd: string) {
   estado.visor = { ruta, cwd, vez: (estado.visor?.vez || 0) + 1 };
@@ -204,7 +214,7 @@ function recibir(m: ServidorMensaje) {
     case 'catalogo': estado.catalogo = m.proveedores; break;
     case 'limites': estado.limites = { limites: m.limites, fecha: m.fecha }; estado.pidiendoLimites = 0; break;
     case 'comandos': estado.comandos.set(m.agente, m.comandos); break;
-    case 'carpeta': estado.carpeta = { ruta: m.ruta, vez: estado.carpeta.vez + 1 }; break;
+    case 'explorado': { const { t: _, ...resto } = m; estado.explorado = resto; break; }
     case 'error': mostrarError(m.texto); break;
     case 'aviso': mostrarError(m.texto, 'info'); break;
     case 'borrada': {
@@ -215,6 +225,11 @@ function recibir(m: ServidorMensaje) {
     }
     case 'grupos': estado.grupos = m.grupos; break;
     case 'aplicaciones': estado.apps = { ruta: m.ruta, apps: m.apps }; break;
+    case 'archivoBorrado': {
+      estado.borrados.set(claveArchivo(m.ruta, m.cwd), m.id);
+      if (estado.visor?.ruta === m.ruta && estado.visor.cwd === (m.cwd || '')) estado.visor = null;
+      break;
+    }
     case 'enfocar': if (estado.agentes.some(a => a.id === m.agente)) elegir({ tipo: 'agente', id: m.agente }); break;
   }
   avisar();

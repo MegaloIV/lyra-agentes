@@ -801,7 +801,6 @@ body.arrastrando iframe { pointer-events: none; }
 .carpeta-cabecera > svg { color: var(--amarillo); flex: none; }
 .carpeta-nombre { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .carpeta .grupo-lista { padding-left: .7rem; }
-.carpeta-vacia { margin: 0 0 .3rem 1.9rem; font-size: .76rem; color: var(--tenue); font-style: italic; }
 [data-soltar="true"] { background: var(--lima-suave); border-radius: var(--radio-chico); outline: 1px dashed rgba(184, 224, 74, .5); }
 .grupo[data-grupo="historial"] { margin-top: .9rem; }
 
@@ -825,6 +824,15 @@ body.arrastrando iframe { pointer-events: none; }
   border: 0; background: none; padding: .4rem .6rem; border-radius: var(--radio-chico); color: var(--texto);
 }
 .visor-archivo:hover { background: var(--superficie); }
+.visor-lista li { display: flex; align-items: center; gap: .2rem; border-radius: var(--radio-chico); }
+.visor-lista li:hover { background: var(--superficie); }
+.visor-lista li .visor-archivo { flex: 1; min-width: 0; }
+.visor-lista li .visor-archivo:hover { background: none; }
+.visor-lista li:hover .visor-borrar, .visor-borrar[data-armada], .visor-borrar:focus-visible { opacity: 1; }
+.visor-borrar { flex: none; margin-right: .3rem; }
+@media (hover: none) { .visor-lista li .visor-borrar { opacity: .7; } }
+.icono-boton[data-accion="borrar"]:hover { background: var(--rojo-suave); color: var(--rojo); }
+.icono-boton[data-armada="true"] { position: relative; overflow: visible; background: var(--rojo); color: #1c1d1b; }
 .visor-archivo svg { flex: none; color: var(--azul); }
 .visor-archivo-texto { min-width: 0; display: flex; flex-direction: column; }
 .visor-archivo-texto span { font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -874,14 +882,6 @@ body.arrastrando iframe { pointer-events: none; }
 .enlace { border: 0; background: none; padding: 0; color: var(--lima); text-decoration: underline; text-underline-offset: 3px; }
 
 /* Agente nuevo */
-.documento.nuevo .documento-ancho { padding-top: 14vh; }
-.nuevo-pista { color: var(--tenue); font-size: .9rem; margin: 0 0 2rem; max-width: 34rem; }
-.nuevo-recientes ul { list-style: none; margin: .3rem 0 0; padding: 0; }
-.nuevo-recientes li { display: flex; align-items: baseline; gap: .6rem; padding: .45rem .6rem; border-radius: var(--radio-chico); cursor: pointer; }
-.nuevo-recientes li:hover { background: var(--superficie); }
-.nuevo-recientes strong { font-weight: 500; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nuevo-recientes small { margin-left: auto; color: var(--tenue); white-space: nowrap; font-size: .76rem; }
-.nuevo-recientes .grupo-titulo { padding-left: .6rem; }
 .tramo-boton { all: unset; display: flex; align-items: center; gap: .4rem; width: 100%; cursor: pointer; }
 .tramo-boton:focus-visible { outline: 2px solid var(--lima); border-radius: 4px; }
 .agente-accion { padding: 0; }
@@ -948,4 +948,49 @@ html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra));
   html[data-ventana] .agentes { width: var(--ancho-cajon); box-shadow: none; }
   /* Lo que queda debajo del cajón se recorta: ahí se ve el escritorio, no el texto */
   html[data-ventana] .lyra:has(.agentes[data-abierto="true"]) .lectura { clip-path: inset(0 0 0 var(--ancho-cajon)); }
+}
+
+/* Explorador de carpetas dentro del chip «carpeta» */
+.desplegable:has(.explorador), .desplegable:has(.desplegable-pestanas) { width: 19rem; max-height: min(26rem, 65vh); }
+.desplegable-pestanas { display: flex; gap: .2rem; padding: .1rem .1rem .3rem; border-bottom: 1px solid var(--borde); margin-bottom: .2rem; }
+.desplegable-pestanas button { flex: 1; border: 0; background: none; color: var(--apagado); font-size: .78rem; padding: .25rem; border-radius: var(--radio-chico); }
+.desplegable-pestanas button:hover { background: var(--superficie-2); }
+.desplegable-pestanas button[aria-pressed="true"] { background: var(--lima-suave); color: var(--lima); }
+.explorador { display: flex; flex-direction: column; min-height: 0; }
+.explorador-ruta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .05rem; padding: .15rem .2rem .3rem; font: .76rem var(--mono); }
+.explorador-ruta button { border: 0; background: none; color: var(--apagado); padding: .1rem .25rem; border-radius: 4px; font: inherit; }
+.explorador-ruta button:hover { background: var(--superficie-2); color: var(--texto); }
+.explorador-ruta button[aria-current="true"] { color: var(--lima); }
+.explorador-subir { font-size: .95rem !important; line-height: 1; margin-right: .15rem; }
+.explorador-sep { color: var(--tenue); }
+.explorador-lista { display: flex; flex-direction: column; overflow-y: auto; max-height: 14rem; }
+.explorador-lista > button {
+  display: flex; align-items: center; gap: .5rem; border: 0; background: none; text-align: left; color: var(--texto);
+  padding: .3rem .6rem; border-radius: var(--radio-chico); font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.explorador-lista > button svg { flex: none; color: var(--amarillo); }
+.explorador-lista > button:hover { background: var(--superficie-2); }
+.explorador-usar {
+  margin: .3rem .1rem .1rem; border: 1px solid rgba(184, 224, 74, .35); background: var(--lima-suave); color: var(--lima);
+  border-radius: var(--radio-chico); padding: .3rem .5rem; font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.explorador-usar:hover { background: rgba(184, 224, 74, .22); }
+
+/* Cada carpeta de la barra en su cuadro, con borde de su color (--tono lo pone Barra.tsx) */
+.carpeta, .tramo.proyecto {
+  --tono: var(--apagado);
+  border: 1px solid color-mix(in srgb, var(--tono) 40%, transparent);
+  background: color-mix(in srgb, var(--tono) 5%, transparent);
+  border-radius: var(--radio); padding: .1rem .15rem; margin: 0 0 .4rem;
+}
+.carpeta + .carpeta, .tramo.proyecto + .tramo.proyecto { margin-top: 0; }
+.carpeta-cabecera > svg, .carpeta > .carpeta-cabecera .carpeta-flecha::before, .tramo.proyecto .carpeta-flecha::before { color: var(--tono); }
+.tramo.proyecto .proyecto-titulo, .carpeta-cabecera { border-radius: calc(var(--radio) - 3px); }
+.carpeta[data-soltar="true"], .tramo.proyecto[data-soltar="true"] { border-style: dashed; }
+
+/* Inicio (agente nuevo): solo la marca, grande y medio transparente */
+.documento.nuevo { display: grid; place-items: center; }
+.marca-grande {
+  font-weight: 800; font-size: clamp(4rem, 14vw, 11rem); letter-spacing: .14em; line-height: 1; padding-left: .14em;
+  color: var(--texto-fuerte); opacity: .13; user-select: none; pointer-events: none;
 }

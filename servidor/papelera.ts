@@ -1,4 +1,4 @@
-// Borrar y renombrar conversaciones guardadas. Borrar nunca es definitivo:
+// Borrar y renombrar conversaciones guardadas, y mandar a la papelera archivos del visor. Borrar nunca es definitivo:
 // Claude y Gemini van a la papelera del escritorio (se recuperan desde el gestor de archivos)
 // y Codex las archiva (siguen en ~/.codex/archived_sessions).
 import { execFile } from 'node:child_process';
@@ -9,12 +9,22 @@ import { renameSession } from '@anthropic-ai/claude-agent-sdk';
 import type { Proveedor } from './protocolo.ts';
 import { archivarCodex, renombrarCodex } from './codex.ts';
 import { quitarDeRegistro, renombrarEnRegistro } from './gemini.ts';
+import { ubicar } from './archivos.ts';
 
 const ID = /^[\w-]{1,100}$/;
 
 export function aPapelera(rutas: string[]): Promise<void> {
   if (!rutas.length) return Promise.resolve();
   return new Promise((bien, mal) => execFile('gio', ['trash', '--', ...rutas], (e, _o, err) => e ? mal(new Error(`No se pudo mover a la papelera: ${err.trim() || e.message}`)) : bien()));
+}
+
+/** Un archivo del visor a la papelera: solo los que el visor puede mostrar (casa, /tmp o /mnt/shared, nada oculto) */
+export async function borrarArchivo(ruta: string, cwd = ''): Promise<string> {
+  const { real } = await ubicar(ruta, cwd);
+  // /tmp vive en memoria y no tiene papelera; ahí no se borra nada para siempre desde aquí
+  if (real.startsWith('/tmp/')) throw new Error('Los archivos de /tmp no tienen papelera (se borran solos al apagar). Ábrelo con su app si quieres borrarlo ya.');
+  await aPapelera([real]);
+  return real;
 }
 
 const existe = (r: string) => stat(r).then(() => true, () => false);

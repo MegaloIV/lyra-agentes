@@ -30,7 +30,9 @@ export type Limite = { proveedor: Proveedor; plan?: string; ventanas: Ventana[];
 /** Carpetas propias del usuario y en cuál está cada sesión (`sessionId` → id de carpeta) */
 export type Grupos = { carpetas: { id: string; nombre: string; abierta: boolean }[]; sesiones: Record<string, string> };
 export type ClienteMensaje =
-  | { t: 'hola' | 'historial' | 'elegirCarpeta' }
+  | { t: 'hola' | 'historial' }
+  /** Las subcarpetas de `ruta`, para el explorador del chip «carpeta» */
+  | { t: 'explorar'; ruta: string }
   | { t: 'crear'; cwd: string; proveedor?: Proveedor; modelo?: string; esfuerzo?: string; modo?: PermissionMode; prompt?: string }
   | { t: 'enviar'; agente: string; texto: string }
   | { t: 'interrumpir' | 'cerrar' | 'leer' | 'comandos'; agente: string }
@@ -41,11 +43,13 @@ export type ClienteMensaje =
   | { t: 'catalogo' }
   /** Los límites de uso; `fresco` los vuelve a pedir aunque haya unos recientes */
   | { t: 'limites'; fresco?: boolean }
-  | { t: 'abrir'; con: 'terminal' | 'carpeta' | 'loginGemini'; cwd?: string }
+  | { t: 'abrir'; con: 'terminal' | 'carpeta' | 'carpetaAparte' | 'loginGemini'; cwd?: string }
   /** Abre un archivo con su app (`ruta` relativa a `cwd`) */
   | { t: 'abrirArchivo'; ruta: string; cwd?: string; app?: string }
   /** Las apps que pueden abrir ese archivo (para «Abrir con…») */
   | { t: 'aplicaciones'; ruta: string; cwd?: string }
+  /** Manda un archivo del visor a la papelera (`id`: el bloque que lo nombró, para dejar de listarlo) */
+  | { t: 'borrarArchivo'; ruta: string; cwd?: string; id?: string }
   | { t: 'guardarGrupos'; grupos: Grupos }
   | { t: 'abrirSesion'; sessionId: string; cwd: string; proveedor?: Proveedor }
   | { t: 'reanudar'; sessionId: string; cwd: string; proveedor?: Proveedor; texto?: string }
@@ -61,12 +65,13 @@ export type ServidorMensaje =
   | { t: 'ops'; agente: string; ops: Op[] }
   | { t: 'historial'; sesiones: Sesion[] }
   | { t: 'comandos'; agente: string; comandos: Comando[] }
-  | { t: 'carpeta'; ruta: string | null }
+  | { t: 'explorado'; pedida: string; ruta: string; carpetas: string[]; recortado?: boolean; aviso?: string }
   | { t: 'catalogo'; proveedores: InfoProveedor[] }
   | { t: 'limites'; limites: Limite[]; fecha: number }
   | { t: 'error'; texto: string }
   | { t: 'aviso'; texto: string }
   | { t: 'borrada'; sessionId?: string; agente?: string }
+  | { t: 'archivoBorrado'; ruta: string; cwd?: string; id?: string }
   | { t: 'enfocar'; agente: string }
   | { t: 'grupos'; grupos: Grupos }
   | { t: 'aplicaciones'; ruta: string; apps: { id: string; nombre: string; predeterminada?: boolean }[] };

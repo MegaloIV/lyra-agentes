@@ -9,12 +9,11 @@ import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Do
 import { Redactor } from './componentes/Redactor.tsx';
 import { Visor, archivosDe } from './componentes/Visor.tsx';
 import type { Bloque } from '@protocolo';
-import { aMarkdown, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from './util.ts';
+import { aMarkdown, haceCuanto, nombreProveedor, rutaCorta } from './util.ts';
 
 function Indice({ entradas, activo, onIr }: { entradas: Entrada[]; activo: string; onIr: (id: string) => void }) {
   return (
     <nav class="indice">
-      {!entradas.length && <p class="visor-nota">El índice se arma con tus mensajes y los títulos de las respuestas.</p>}
       <ol class="indice-lista">
         {entradas.map(e => (
           <li key={e.id}><a data-nivel={e.nivel} class={e.id === activo ? 'activo' : undefined} href={'#' + e.id}
@@ -81,7 +80,7 @@ function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVis
     <>
       <div class="documento" ref={ref} onScroll={alDesplazar} onClick={clic}>
         <div class="documento-ancho">
-          {turnos.length ? <Turnos turnos={turnos} hijos={hijos} cwd={cwd} quien={quien} /> : <p class="aviso" data-nivel="info">Escribe abajo el primer mensaje.</p>}
+          {turnos.length > 0 && <Turnos turnos={turnos} hijos={hijos} cwd={cwd} quien={quien} />}
         </div>
       </div>
       <button class="ir-abajo" hidden={!nuevo} onClick={() => { const d = ref.current; if (d) { alFinal.current = true; d.scrollTo({ top: d.scrollHeight, behavior: 'smooth' }); setNuevo(false); } }}>↓ Ir al final</button>
@@ -176,7 +175,6 @@ function App() {
   const exportar = () => doc ? aMarkdown(doc.bloques, titulo, quien, cwd) : '';
   const objetivo: Objetivo | undefined = agente ? { proveedor, titulo, agente: agente.id, sessionId: agente.sessionId, cwd, trabajando: agente.estado === 'trabajando' }
     : v?.tipo === 'sesion' ? { proveedor, titulo, sessionId: v.sessionId, cwd } : undefined;
-  const recientes = estado.historial.slice(0, 6);
   const ancho = panel ? anchos[panel] : 0;
 
   function arrastrarBorde(e: PointerEvent) {
@@ -232,21 +230,7 @@ function App() {
                 onEntradas={(lista, activo) => setEntradas(prev => prev.lista === lista && prev.activo === activo ? prev : { lista, activo })} />
             ) : <div class="vacio"><p>Cargando la conversación…</p></div>) : (
               <div class="documento nuevo">
-                <div class="documento-ancho">
-                  <p class="nuevo-pista">Escribe abajo y el agente empieza. Los chips de la caja eligen con quién, el modelo, el esfuerzo, los permisos y la carpeta; se recuerdan para la próxima vez.</p>
-                  {recientes.length > 0 && (
-                    <section class="nuevo-recientes">
-                      <h3 class="grupo-titulo">O retoma una</h3>
-                      <ul>
-                        {recientes.map(s => (
-                          <li key={s.sessionId} data-proveedor={s.proveedor} onClick={() => elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor })}>
-                            <span class="proveedor-punto" /><strong>{s.titulo}</strong><small>{nombreCarpeta(s.cwd)} · {haceCuanto(s.modificado)}</small>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
-                </div>
+                <div class="marca-grande" aria-hidden="true">LYRA</div>
               </div>
             )}
             <Redactor vista={v} agente={agente} />

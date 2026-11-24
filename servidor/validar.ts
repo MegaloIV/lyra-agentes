@@ -7,15 +7,17 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
   const m = objeto(valor), texto = (k: string, opcional = false) => opcional && m[k] === undefined || typeof m[k] === 'string' && (m[k] as string).length <= 200000;
   let valido = false;
   switch (m.t) {
-    case 'hola': case 'historial': case 'elegirCarpeta': case 'catalogo': valido = true; break;
+    case 'hola': case 'historial': case 'catalogo': valido = true; break;
+    case 'explorar': valido = texto('ruta') && (m.ruta as string).length <= 4096; break;
     case 'limites': valido = m.fresco === undefined || typeof m.fresco === 'boolean'; break;
     case 'foco': valido = typeof m.visible === 'boolean'; break;
     case 'crear': valido = texto('cwd') && !!m.cwd && texto('modelo', true) && texto('esfuerzo', true) && texto('prompt', true) && proveedorValido(m.proveedor) && (m.modo === undefined || modos.includes(m.modo as PermissionMode)); break;
     case 'abrirSesion': case 'reanudar': valido = texto('sessionId') && !!m.sessionId && texto('cwd') && !!m.cwd && texto('texto', true) && proveedorValido(m.proveedor); break;
     case 'esfuerzo': valido = texto('agente') && (m.esfuerzo === null || texto('esfuerzo')); break;
-    case 'abrir': valido = ['terminal', 'carpeta', 'loginGemini'].includes(String(m.con)) && texto('cwd', true); break;
+    case 'abrir': valido = ['terminal', 'carpeta', 'carpetaAparte', 'loginGemini'].includes(String(m.con)) && texto('cwd', true); break;
     case 'abrirArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true) && (m.app === undefined || typeof m.app === 'string' && /^[\w.+-]{1,200}\.desktop$/.test(m.app)); break;
     case 'aplicaciones': valido = texto('ruta') && !!m.ruta && texto('cwd', true); break;
+    case 'borrarArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true) && (m.id === undefined || typeof m.id === 'string' && m.id.length <= 200); break;
     case 'guardarGrupos': valido = m.grupos !== null && typeof m.grupos === 'object'; break;
     case 'enviar': valido = texto('agente') && texto('texto'); break;
     case 'interrumpir': case 'cerrar': case 'leer': case 'comandos': valido = texto('agente'); break;

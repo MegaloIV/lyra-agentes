@@ -3,11 +3,11 @@
 Una ventana para trabajar con varios agentes de programación a la vez —**Claude Code**, **Codex**, **Gemini CLI** y un **modelo local** con Ollama— y leer cada conversación como un documento ordenado, en vez de una terminal que se desplaza sin fin.
 
 - **Conversaciones como documento:** el texto del agente en Markdown, las acciones (leer, editar, ejecutar) plegadas con su diff o su salida, y un índice para saltar entre tus mensajes.
-- **Varios agentes al mismo tiempo:** la barra de la izquierda muestra quién te necesita, quién trabaja y quién terminó. El historial de los cuatro proveedores se agrupa por la carpeta de cada proyecto, y además puedes crear tus propias carpetas.
-- **Sin diálogos:** el agente nuevo empieza al escribir. El proveedor, el modelo, el esfuerzo, los permisos y la carpeta son chips en la misma caja de texto, y se pueden cambiar en cualquier momento (Shift+Tab cambia los permisos, como en la terminal).
+- **Varios agentes al mismo tiempo:** la barra de la izquierda muestra quién te necesita, quién trabaja y quién terminó. El historial de los cuatro proveedores se agrupa por la carpeta de cada proyecto, cada una en un cuadro con borde de su color, y además puedes crear tus propias carpetas. El botón «Abrir en otro escritorio» de cada proyecto abre su carpeta en el gestor de archivos, en un escritorio vacío (en Hyprland; en otros escritorios, solo la abre).
+- **Sin diálogos:** el agente nuevo empieza al escribir. El proveedor, el modelo, el esfuerzo, los permisos y la carpeta son chips en la misma caja de texto, y se pueden cambiar en cualquier momento (Shift+Tab cambia los permisos, como en la terminal). El chip de la carpeta tiene sus carpetas recientes y un explorador para subir y bajar de nivel en el mismo menú, sin abrir otra ventana.
 - **Límites de uso a la vista:** abajo en la barra, cuánto usaste de Claude y de Codex (la ventana de 5 horas y la semanal), con la hora en que se renueva cada una. Se actualiza solo y al tocar «Uso».
 - **Permisos y preguntas en línea:** aprobar, rechazar con un motivo o responder sin salir del documento.
-- **Visor al costado:** muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas de cálculo, sin abrir otra app. «Abrir con…» ofrece las apps de tu escritorio que abren ese archivo.
+- **Visor al costado:** muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas de cálculo, sin abrir otra app. «Abrir con…» ofrece las apps de tu escritorio que abren ese archivo, y la papelera (dos clics) lo manda a la papelera del escritorio, de donde se recupera.
 - **Ventana propia:** GTK4 + WebKitGTK (unos 300 MB), no un navegador. También se puede usar desde un navegador.
 
 Todo corre en tu computadora: un servidor local (127.0.0.1) maneja a los agentes con tus propias cuentas y la ventana lo muestra.
@@ -91,7 +91,7 @@ El estado se guarda en `~/.local/state/lyra-agentes/`: el token, las carpetas pr
 ## Seguridad
 
 - El servidor escucha solo en 127.0.0.1 y exige un token aleatorio, guardado con permisos 600, en cada conexión. Además comprueba el origen.
-- El visor solo muestra archivos de tu carpeta personal, `/tmp` y `/mnt/shared`, nunca de carpetas ocultas como `~/.ssh`. Resuelve los enlaces simbólicos antes de comprobar la ruta. El HTML se muestra sin scripts.
+- El visor solo muestra archivos de tu carpeta personal, `/tmp` y `/mnt/shared`, nunca de carpetas ocultas como `~/.ssh`. Resuelve los enlaces simbólicos antes de comprobar la ruta. El HTML se muestra sin scripts. Borrar desde el visor sigue las mismas reglas y nunca es definitivo: solo mueve a la papelera (en `/tmp`, que no tiene, no borra). El explorador de carpetas solo lista nombres de carpetas, sin las ocultas.
 - Borrar una conversación no es definitivo: las de Claude, Gemini y las locales van a la papelera del escritorio, y las de Codex se archivan.
 
 ## Desarrollo

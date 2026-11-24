@@ -2,7 +2,7 @@
 // Sin agente elegido es un agente nuevo: se crea al mandar el primer mensaje, con los ajustes que estén puestos.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { PermissionMode, Proveedor, ResumenAgente } from '@protocolo';
-import { estado, enviar, crearAgente, cambiarBorrador, type Vista } from '../tienda.ts';
+import { estado, enviar, crearAgente, cambiarBorrador, explorar, type Vista } from '../tienda.ts';
 import { Desplegable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { PROVEEDORES, horaDe, info, miles, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
@@ -29,6 +29,41 @@ function Opcion({ actual, nota, al, children }: { actual?: boolean; nota?: strin
   return <button type="button" aria-current={actual ? 'true' : undefined} title={nota} onClick={al}>{children}</button>;
 }
 
+/** Navega por las carpetas dentro del mismo menú: la ruta de arriba sube a cualquier nivel, la lista entra */
+function Explorador({ desde, alElegir }: { desde: string; alElegir: (ruta: string) => void }) {
+  useEffect(() => { explorar(desde || '~'); }, []);
+  const e = estado.explorado;
+  const corta = e ? rutaCorta(e.ruta) : rutaCorta(desde || '~');
+  // ~/Proyectos/Lyra → [~, ~/Proyectos, ~/Proyectos/Lyra]; /mnt/shared → [/, /mnt, /mnt/shared]
+  const partes = corta.split('/').filter(Boolean);
+  const niveles = corta.startsWith('~')
+    ? partes.map((p, i) => ({ nombre: p, ruta: partes.slice(0, i + 1).join('/') }))
+    : [{ nombre: '/', ruta: '/' }, ...partes.map((p, i) => ({ nombre: p, ruta: '/' + partes.slice(0, i + 1).join('/') }))];
+  const arriba = e && e.ruta !== '/' ? e.ruta.replace(/\/[^/]+$/, '') || '/' : '';
+  return (
+    <div class="explorador">
+      <div class="explorador-ruta">
+        {arriba && <button type="button" class="explorador-subir" title="Subir un nivel" onClick={() => explorar(arriba)}>‹</button>}
+        {niveles.map((n, i) => (
+          <span key={n.ruta} class="explorador-nivel">
+            {i > 0 && n.nombre !== '/' && niveles[i - 1]!.nombre !== '/' && <span class="explorador-sep">/</span>}
+            <button type="button" aria-current={i === niveles.length - 1 ? 'true' : undefined} onClick={() => explorar(n.ruta)}>{n.nombre}</button>
+          </span>
+        ))}
+      </div>
+      <div class="explorador-lista">
+        {!e && <p class="desplegable-nota">…</p>}
+        {e?.aviso && <p class="desplegable-nota">{e.aviso}</p>}
+        {e?.carpetas.map(c => (
+          <button type="button" key={c} onClick={() => explorar(`${e.ruta === '/' ? '' : e.ruta}/${c}`)}><Icono nombre="carpeta" tam={13} />{c}</button>
+        ))}
+        {e && !e.carpetas.length && !e.aviso && <p class="desplegable-nota">Sin subcarpetas</p>}
+      </div>
+      {e && <button type="button" class="explorador-usar" onClick={() => alElegir(rutaCorta(e.ruta))}>Usar «{nombreCarpeta(rutaCorta(e.ruta) || '/')}»</button>}
+    </div>
+  );
+}
+
 /** Los ajustes: del agente abierto (se cambian al vuelo) o del agente nuevo (se guardan para la próxima vez) */
 function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boolean; solo?: Proveedor }) {
   const [abierto, setAbierto] = useState('');
@@ -44,6 +79,7 @@ function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boole
   const cwd = agente?.cwd || b.cwd;
   const recientes = [...new Set([...estado.agentes.map(a => a.cwd), ...estado.historial.map(s => s.cwd)].filter(Boolean))].slice(0, 12);
   const [ruta, setRuta] = useState('');
+  const [explorando, setExplorando] = useState(false);
 
   const ponerModelo = (v: string | null) => { if (agente) enviar({ t: 'modelo', agente: agente.id, modelo: v }); else cambiarBorrador({ modelo: v || '' }); cerrar(); };
   const ponerEsfuerzo = (v: string | null) => { if (agente) enviar({ t: 'esfuerzo', agente: agente.id, esfuerzo: v }); else cambiarBorrador({ esfuerzo: v || '' }); cerrar(); };
@@ -83,10 +119,15 @@ function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boole
 
       {nuevo ? (
         <Chip id="carpeta" abierto={abierto} setAbierto={setAbierto} titulo={`Carpeta: ${rutaCorta(cwd) || '~/'}`} texto={<><Icono nombre="carpeta" tam={12} />{nombreCarpeta(rutaCorta(cwd) || '~')}</>}>
-          {recientes.map(r => <Opcion key={r} actual={rutaCorta(r) === rutaCorta(cwd)} nota={rutaCorta(r)} al={() => { cambiarBorrador({ cwd: rutaCorta(r) }); cerrar(); }}>{nombreCarpeta(r)}<small>{rutaCorta(r).replace(/\/[^/]+$/, '') || '/'}</small></Opcion>)}
+          <div class="desplegable-pestanas">
+            <button type="button" aria-pressed={!explorando} onClick={() => setExplorando(false)}>Recientes</button>
+            <button type="button" aria-pressed={explorando} onClick={() => setExplorando(true)}>Explorar</button>
+          </div>
+          {explorando
+            ? <Explorador desde={cwd} alElegir={r => { cambiarBorrador({ cwd: r }); cerrar(); }} />
+            : recientes.map(r => <Opcion key={r} actual={rutaCorta(r) === rutaCorta(cwd)} nota={rutaCorta(r)} al={() => { cambiarBorrador({ cwd: rutaCorta(r) }); cerrar(); }}>{nombreCarpeta(r)}<small>{rutaCorta(r).replace(/\/[^/]+$/, '') || '/'}</small></Opcion>)}
           <form class="desplegable-campo" onSubmit={e => { e.preventDefault(); if (ruta.trim()) { cambiarBorrador({ cwd: ruta.trim() }); setRuta(''); cerrar(); } }}>
             <input placeholder="Otra ruta… (Enter)" value={ruta} spellcheck={false} onInput={e => setRuta((e.currentTarget as HTMLInputElement).value)} />
-            <button type="button" class="icono-boton" title="Elegir con el selector de carpetas" onClick={() => { enviar({ t: 'elegirCarpeta' }); cerrar(); }}><Icono nombre="carpeta" /></button>
           </form>
         </Chip>
       ) : <span class="chip" data-chip="carpeta" title={rutaCorta(cwd)}><Icono nombre="carpeta" tam={12} />{nombreCarpeta(cwd)}</span>}
@@ -117,13 +158,6 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
     window.addEventListener('lyra-enfocar', enfocar);
     return () => window.removeEventListener('lyra-enfocar', enfocar);
   }, []);
-  // Respuesta del selector de carpetas (zenity)
-  const vezCarpeta = useRef(estado.carpeta.vez);
-  useEffect(() => {
-    if (estado.carpeta.vez === vezCarpeta.current) return;
-    vezCarpeta.current = estado.carpeta.vez;
-    if (estado.carpeta.ruta) cambiarBorrador({ cwd: rutaCorta(estado.carpeta.ruta) });
-  });
   // El agente nuevo arranca en la carpeta del último usado si no hay una elegida
   if (nuevo && !estado.borrador.cwd) { const c = estado.agentes[0]?.cwd || estado.historial[0]?.cwd; if (c) estado.borrador.cwd = rutaCorta(c); }
 
@@ -186,8 +220,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
 
   const soloLectura = vista?.tipo === 'sesion';
   const textoEstado = avisoEsc ? 'Pulsa Esc otra vez para detener'
-    : falta || (soloLectura ? 'Escribe para retomarla'
-    : agente?.estado === 'error' && agente.sessionId ? 'Se detuvo · escribe o reanuda'
+    : falta || (agente?.estado === 'error' && agente.sessionId ? 'Se detuvo · escribe o reanuda'
     : TEXTO_ESTADO[agente?.estado || ''] || '');
   const cuota = datosNuevo?.cuota;
   const quien = nombreProveedor(agente?.proveedor || (nuevo ? b.proveedor : vista?.tipo === 'sesion' ? vista.proveedor : undefined));
