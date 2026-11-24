@@ -136,10 +136,3 @@ export function aMarkdown(bloques: Bloque[], titulo: string, quien: string, cwd:
   return salida.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
-/** Colores para distinguir las carpetas de la barra: cada una saca el suyo de su ruta o su id, siempre el mismo */
-const TONOS = ['#e39b74', '#9cbfde', '#c38fd0', '#8fc9a8', '#e8b64c', '#6cc7b4', '#e0675f', '#b8e04a', '#d98bb0', '#a3a6e8'];
-export function tonoDe(clave: string): string {
-  let h = 0;
-  for (const c of clave) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return TONOS[h % TONOS.length]!;
-}

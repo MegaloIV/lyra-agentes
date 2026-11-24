@@ -8,7 +8,7 @@ import type { Objetivo } from '../tienda.ts';
 import { BotonIcono, Desplegable, Papelera, TituloEditable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { Limites } from './Limites.tsx';
-import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta, tonoDe } from '../util.ts';
+import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from '../util.ts';
 
 const GRUPOS = [
   { clave: 'atencion', titulo: 'Te necesitan', estados: ['esperando', 'error'] },
@@ -158,7 +158,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
             if (q && !lista.length && !c.nombre.toLowerCase().includes(q)) return null;
             const abierta = c.abierta || !!q;
             return (
-              <div class="carpeta" key={c.id} data-abierta={String(abierta)} style={{ '--tono': tonoDe(c.id) }} {...soltable(c.id, marcado, setMarcado)}>
+              <div class="carpeta" key={c.id} data-abierta={String(abierta)} {...soltable(c.id, marcado, setMarcado)}>
                 <div class="carpeta-cabecera" role="button" tabIndex={0} onClick={() => alternarCarpeta(c.id)} onKeyDown={e => e.key === 'Enter' && alternarCarpeta(c.id)}>
                   <span class="carpeta-flecha" />
                   <Icono nombre="carpeta" tam={14} />
@@ -178,7 +178,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
           {proyectos.map(([cwd, lista], i) => {
             const ab = abierto(cwd, i);
             return (
-              <div key={cwd} class="tramo proyecto" data-abierto={String(ab)} style={{ '--tono': tonoDe(cwd) }}>
+              <div key={cwd} class="tramo proyecto" data-abierto={String(ab)}>
                 <h3 class="grupo-titulo tramo-titulo proyecto-titulo" title={rutaCorta(cwd)}>
                   <button type="button" class="tramo-boton" aria-expanded={ab} onClick={() => alternar(cwd, i)}>
                     <span class="carpeta-flecha" /><span class="proyecto-nombre">{nombreCarpeta(cwd)}</span> <span class="grupo-cuenta">{lista.length}</span>

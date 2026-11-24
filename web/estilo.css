@@ -976,15 +976,13 @@ html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra));
 }
 .explorador-usar:hover { background: rgba(184, 224, 74, .22); }
 
-/* Cada carpeta de la barra en su cuadro, con borde de su color (--tono lo pone Barra.tsx) */
+/* Cada carpeta de la barra en su cuadro: borde blanco y fondo gris */
 .carpeta, .tramo.proyecto {
-  --tono: var(--apagado);
-  border: 1px solid color-mix(in srgb, var(--tono) 40%, transparent);
-  background: color-mix(in srgb, var(--tono) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--texto-fuerte) 45%, transparent);
+  background: var(--superficie);
   border-radius: var(--radio); padding: .1rem .15rem; margin: 0 0 .4rem;
 }
 .carpeta + .carpeta, .tramo.proyecto + .tramo.proyecto { margin-top: 0; }
-.carpeta-cabecera > svg, .carpeta > .carpeta-cabecera .carpeta-flecha::before, .tramo.proyecto .carpeta-flecha::before { color: var(--tono); }
 .tramo.proyecto .proyecto-titulo, .carpeta-cabecera { border-radius: calc(var(--radio) - 3px); }
 .carpeta[data-soltar="true"], .tramo.proyecto[data-soltar="true"] { border-style: dashed; }
 
