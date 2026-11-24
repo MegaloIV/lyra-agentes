@@ -71,12 +71,13 @@ button { cursor: pointer; }
   background: var(--fondo-hondo);
   border-right: 1px solid var(--borde);
   display: flex; flex-direction: column;
-  overflow-y: auto;
-  padding: 0 .5rem 1rem;
+  overflow: hidden; height: 100vh;
+  padding: 0 .5rem;
 }
+/* Solo la lista se desplaza: la cabecera queda arriba sin taparla (y sin fondo propio, por la transparencia) */
+.agentes-desplazable { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -.5rem; padding: 0 .5rem 1rem; }
 .agentes-cabecera {
-  position: sticky; top: 0; z-index: 2;
-  background: var(--fondo-hondo);
+  flex: none;
   display: flex; align-items: center; justify-content: space-between;
   padding: .9rem .5rem .8rem;
 }
@@ -878,7 +879,7 @@ body.arrastrando iframe { pointer-events: none; }
 .proyecto-titulo { text-transform: none; letter-spacing: 0; font-size: .82rem; font-weight: 500; color: var(--texto); }
 
 /* Visor: páginas de PDF y Word, video y audio, «Abrir con…» */
-.paginas-barra { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: .1rem; padding: .25rem .5rem; background: var(--panel, var(--fondo)); border-bottom: 1px solid var(--borde); }
+.paginas-barra { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: .1rem; padding: .25rem .5rem; background: var(--fondo-hondo); border-bottom: 1px solid var(--borde); }
 .paginas-info { margin-right: auto; font-size: .74rem; color: var(--tenue); }
 .paginas-zoom { all: unset; cursor: pointer; font: .74rem var(--mono); color: var(--tenue); min-width: 2.8rem; text-align: center; border-radius: 4px; padding: .1rem .2rem; }
 .paginas-zoom:hover { color: var(--texto); background: var(--superficie); }
@@ -895,3 +896,12 @@ body.arrastrando iframe { pointer-events: none; }
 .desplegable small { margin-left: auto; padding-left: .8rem; font-size: .7rem; color: var(--tenue); }
 .desplegable-derecha { right: 0; left: auto; }
 .redactor-aviso-suave { opacity: .75; }
+
+/* ───────── En la ventana propia: solo la barra de la izquierda es translúcida ─────────
+   La ventana GTK es transparente y no tiene opacidad propia en Hyprland: cada zona pone la suya. La lectura y
+   el panel derecho (índice y visor) van opacos; la barra deja ver el escritorio como antes (90 %). */
+:root { --opacidad-barra: .9; }
+html[data-ventana] body { background: transparent; }
+html[data-ventana] .lectura { background: var(--fondo); }
+html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra)); }
+@media (max-width: 760px) { html[data-ventana] .agentes { background: var(--fondo-hondo); } }   /* como cajón, encima del texto */

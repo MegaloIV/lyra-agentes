@@ -46,6 +46,8 @@ export type ClienteMensaje =
   | { t: 'foco'; visible: boolean }
   /** Con `agente`, el agente abierto (se cierra antes); si no, una del historial */
   | { t: 'borrar'; proveedor: Proveedor; sessionId?: string; agente?: string }
+  /** Todas las conversaciones de una carpeta de la barra, de una vez */
+  | { t: 'borrarVarias'; sesiones: { proveedor: Proveedor; sessionId: string }[] }
   | { t: 'renombrar'; proveedor: Proveedor; sessionId?: string; agente?: string; cwd?: string; titulo: string };
 export type ServidorMensaje =
   | { t: 'agentes'; agentes: ResumenAgente[] }

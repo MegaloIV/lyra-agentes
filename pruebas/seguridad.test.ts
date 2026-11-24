@@ -48,3 +48,15 @@ test('la terminal se abre con el shell de inicio y sin las variables de otra ter
   assert.equal(env.PATH, '/usr/bin');
   for (const k of ['KITTY_WINDOW_ID', 'TERM', 'STARSHIP_SHELL', 'CLAUDE_CODE_SESSION_ID']) assert.equal(env[k], undefined);
 });
+
+test('borrar varias: solo listas cortas de conversaciones con proveedor e id', async () => {
+  const { validarMensaje } = await import('../servidor/validar.ts');
+  const bien = { t: 'borrarVarias', sesiones: [{ proveedor: 'claude', sessionId: 'a' }, { proveedor: 'codex', sessionId: 'b' }] };
+  assert.deepEqual(validarMensaje(bien), bien);
+  for (const malo of [
+    { t: 'borrarVarias', sesiones: [] },
+    { t: 'borrarVarias', sesiones: [{ proveedor: 'antigravity', sessionId: 'a' }] },
+    { t: 'borrarVarias', sesiones: [{ proveedor: 'claude', sessionId: '' }] },
+    { t: 'borrarVarias', sesiones: Array.from({ length: 501 }, (_, i) => ({ proveedor: 'claude', sessionId: String(i) })) },
+  ]) assert.throws(() => validarMensaje(malo));
+});

@@ -85,6 +85,10 @@ export type Objetivo = { proveedor: Proveedor; titulo: string; agente?: string; 
 
 /** Claude y Gemini van a la papelera del escritorio; Codex se archiva. Nunca es definitivo. */
 export function borrar(o: Objetivo) { enviar({ t: 'borrar', proveedor: o.proveedor, sessionId: o.sessionId, agente: o.agente }); }
+/** Borra todas las conversaciones de una carpeta del historial (van a la papelera o se archivan) */
+export function borrarVarias(sesiones: { proveedor: Proveedor; sessionId: string }[]) {
+  if (sesiones.length) enviar({ t: 'borrarVarias', sesiones: sesiones.map(s => ({ proveedor: s.proveedor, sessionId: s.sessionId })) });
+}
 
 export function cambiarBorrador(cambios: Partial<Borrador>) {
   estado.borrador = { ...estado.borrador, ...cambios };

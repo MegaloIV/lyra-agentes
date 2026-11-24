@@ -1,8 +1,9 @@
 // Barra de la izquierda: agentes abiertos, carpetas propias y las conversaciones anteriores por carpeta del proyecto.
-// Cada fila muestra sus acciones solo al pasar el cursor: mover a una carpeta y la papelera.
+// Cada fila muestra sus acciones solo al pasar el cursor: mover a una carpeta y la papelera. La papelera de una
+// carpeta de proyecto borra todas sus conversaciones (las que se ven, si hay búsqueda o filtro).
 import { useState } from 'preact/hooks';
 import type { Proveedor, ResumenAgente, Sesion } from '@protocolo';
-import { estado, elegir, enviar, avisar, borrar, cambiarBorrador, guardarLocal, renombrar, crearCarpeta, renombrarCarpeta, alternarCarpeta, borrarCarpeta, moverSesion } from '../tienda.ts';
+import { estado, elegir, enviar, avisar, borrar, borrarVarias, cambiarBorrador, guardarLocal, renombrar, crearCarpeta, renombrarCarpeta, alternarCarpeta, borrarCarpeta, moverSesion } from '../tienda.ts';
 import type { Objetivo } from '../tienda.ts';
 import { BotonIcono, Desplegable, Papelera, TituloEditable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
@@ -129,6 +130,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
         <BotonIcono icono="carpetaNueva" titulo="Nueva carpeta" onClick={() => { const id = crearCarpeta('Nueva carpeta'); estado.editando = `carpeta:${id}`; avisar(); }} />
         <BotonIcono icono="nuevo" titulo="Agente nuevo (Alt+N)" clase="icono-boton-lima" aria-current={v === null ? 'true' : undefined} onClick={onNuevo} />
       </header>
+      <div class="agentes-desplazable">
       <div class="buscador">
         <input type="search" class="buscador-campo" placeholder="Buscar…" value={busqueda} onInput={e => setBusqueda((e.currentTarget as HTMLInputElement).value)} />
         {hay.size > 1 && PROVEEDORES.filter(p => hay.has(p.id)).map(p => (
@@ -185,6 +187,8 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
                   <span class="agente-acciones">
                     <button type="button" class="agente-accion" title={`Agente nuevo en ${rutaCorta(cwd)}`} aria-label="Agente nuevo en esta carpeta"
                       onClick={() => { cambiarBorrador({ cwd }); onNuevo(); }}><Icono nombre="nuevo" /></button>
+                    <Papelera titulo={`Borrar ${lista.length === 1 ? 'la conversación' : `las ${lista.length} conversaciones`} de esta carpeta (van a la papelera; la carpeta del disco no se toca)`}
+                      onBorrar={() => borrarVarias(lista)} />
                   </span>
                 </h3>
                 {ab && <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} enProyecto />)}</ul>}
@@ -194,6 +198,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
         </section>
       )}
       {(q || filtro) && !agentes.length && !proyectos.length && ![...porCarpeta.values()].some(l => l.length) && <p class="historial-vacio">Nada coincide.</p>}
+      </div>
     </aside>
   );
 }

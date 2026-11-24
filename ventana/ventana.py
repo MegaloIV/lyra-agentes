@@ -19,7 +19,10 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("WebKit", "6.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, WebKit  # noqa: E402
 
-FONDO = "#1c1d1b"   # el mismo fondo que la página, para que no destelle al abrir
+# La ventana es transparente y la página decide cuánto: la barra de la izquierda deja ver el fondo del
+# escritorio y la lectura y el panel derecho quedan opacos. Para eso, en Hyprland conviene que la ventana
+# no tenga opacidad propia (regla `opacity = "1.0 override 1.0 override"` para la clase io.lyra.Agentes).
+TRANSPARENTE = "rgba(0,0,0,0)"
 DATOS = os.path.join(GLib.get_user_data_dir(), "lyra-agentes", "web")
 CACHE = os.path.join(GLib.get_user_cache_dir(), "lyra-agentes")
 DESCARGAS = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or os.path.expanduser("~")
@@ -49,13 +52,17 @@ class Ventana(Gtk.Application):
         sesion = WebKit.NetworkSession.new(DATOS, CACHE)
         sesion.connect("download-started", self.al_descargar)
 
-        self.vista = vista = WebKit.WebView(network_session=sesion)
+        contenido = WebKit.UserContentManager()
+        # Avisa a la página que está en esta ventana (antes de que se dibuje nada), para que use fondos translúcidos
+        contenido.add_script(WebKit.UserScript.new("document.documentElement.dataset.ventana = 'gtk';",
+            WebKit.UserContentInjectedFrames.TOP_FRAME, WebKit.UserScriptInjectionTime.START, None, None))
+        self.vista = vista = WebKit.WebView(network_session=sesion, user_content_manager=contenido)
         ajustes = vista.get_settings()
         ajustes.set_javascript_can_access_clipboard(True)
         ajustes.set_enable_developer_extras("--depurar" in sys.argv)
         ajustes.set_enable_back_forward_navigation_gestures(False)
         color = Gdk.RGBA()
-        color.parse(FONDO)
+        color.parse(TRANSPARENTE)
         vista.set_background_color(color)
         vista.connect("decide-policy", self.al_decidir)
         vista.connect("notify::title", lambda v, _p: self.ventana and self.ventana.set_title(v.get_title() or "Lyra"))
@@ -65,6 +72,10 @@ class Ventana(Gtk.Application):
         ventana.set_default_size(1280, 860)
         ventana.set_icon_name("lyra-agentes")
         ventana.set_child(vista)
+        ventana.add_css_class("lyra-transparente")
+        css = Gtk.CssProvider()
+        css.load_from_string("window.lyra-transparente { background: transparent; }")
+        Gtk.StyleContext.add_provider_for_display(ventana.get_display(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         teclas = Gtk.EventControllerKey()
         teclas.connect("key-pressed", self.al_tecla)
         ventana.add_controller(teclas)

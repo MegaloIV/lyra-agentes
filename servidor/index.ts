@@ -105,6 +105,17 @@ servidor.on('upgrade', (req, socket, head) => {
             if (r.sessionId) { const g = await olvidarSesion(r.sessionId); if (g) emitir({ t: 'grupos', grupos: g }); }
             emitir({ t: 'borrada', sessionId: r.sessionId, agente: m.agente }); emitir({ t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'aviso', texto: r.texto }); break;
           }
+          case 'borrarVarias': {
+            let bien = 0, mal = 0;
+            for (const x of m.sesiones) {
+              try { await gestor.borrar(x); bien++; emitir({ t: 'borrada', sessionId: x.sessionId }); const g = await olvidarSesion(x.sessionId); if (g) emitir({ t: 'grupos', grupos: g }); }
+              catch { mal++; }
+            }
+            emitir({ t: 'historial', sesiones: await gestor.historial() });
+            const n = (k: number) => k === 1 ? '1 conversación' : `${k} conversaciones`;
+            enviar(ws, mal ? { t: 'error', texto: `Borré ${n(bien)}; ${n(mal)} no se pudieron borrar.` } : { t: 'aviso', texto: `Borré ${n(bien)}: ${m.sesiones.some(x => x.proveedor === 'codex') ? 'las de Codex quedaron archivadas y las demás, en la papelera' : 'están en la papelera'}.` });
+            break;
+          }
           case 'renombrar': await gestor.renombrar(m); emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'elegirCarpeta': emitir({ t: 'carpeta', ruta: await elegirCarpeta() }); break;
         }

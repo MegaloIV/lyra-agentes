@@ -21,6 +21,8 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'modelo': valido = texto('agente') && (m.modelo === null || texto('modelo')); break;
     case 'modo': valido = texto('agente') && modos.includes(m.modo as PermissionMode); break;
     case 'borrar': valido = proveedores.includes(String(m.proveedor)) && texto('sessionId', true) && texto('agente', true) && (!!m.sessionId || !!m.agente); break;
+    case 'borrarVarias': valido = Array.isArray(m.sesiones) && m.sesiones.length > 0 && m.sesiones.length <= 500
+      && m.sesiones.every((x: any) => x && typeof x === 'object' && proveedores.includes(String(x.proveedor)) && typeof x.sessionId === 'string' && x.sessionId.length > 0 && x.sessionId.length <= 200); break;
     case 'renombrar': valido = proveedores.includes(String(m.proveedor)) && texto('sessionId', true) && texto('agente', true) && texto('cwd', true) && (!!m.sessionId || !!m.agente)
       && typeof m.titulo === 'string' && m.titulo.trim().length > 0 && m.titulo.length <= 200; break;
     case 'responder': valido = texto('agente') && texto('solicitud') && ['permitir', 'siempre', 'rechazar'].includes(String(m.decision)) && texto('mensaje', true) && (m.respuestas === undefined || m.respuestas !== null && typeof m.respuestas === 'object' && !Array.isArray(m.respuestas) && Object.values(m.respuestas).every(v => typeof v === 'string')); break;
