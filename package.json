@@ -1,0 +1,32 @@
+{
+  "name": "atril",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "server": "node servidor/index.ts",
+    "start": "vite build && node servidor/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test pruebas/"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.331",
+    "diff": "^9.0.0",
+    "dompurify": "^3.5.0",
+    "highlight.js": "^11.12.0",
+    "markdown-it": "^15.0.3",
+    "preact": "^11.2.0",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/diff": "^7.0.2",
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
