@@ -25,3 +25,10 @@ export async function abrirCon(con: 'antigravity' | 'terminal' | 'carpeta' | 'lo
       return lanzar('kitty', ['--title', 'Gemini · iniciar sesión', '--directory', homedir(), 'gemini'], homedir());
   }
 }
+
+/** Abre un archivo con la app que le corresponde (la misma comprobación que el visor) */
+export async function abrirArchivo(ruta: string, cwd?: string) {
+  const { leerArchivo } = await import('./archivos.ts');
+  const a = await leerArchivo(ruta, cwd);
+  lanzar('xdg-open', [a.ruta], homedir());
+}

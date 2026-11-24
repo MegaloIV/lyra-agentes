@@ -11,7 +11,9 @@ import { GestorAgentes } from './agentes.ts';
 import { elegirCarpeta } from './carpetas.ts';
 import { crearNotificador } from './notificar.ts';
 import { catalogo } from './catalogo.ts';
-import { abrirCon } from './abrir.ts';
+import { abrirCon, abrirArchivo } from './abrir.ts';
+import { leerArchivo } from './archivos.ts';
+import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
 import { avisarCuota, cerrarCodex } from './codex.ts';
 // Si el servidor se lanzó desde una sesión de Claude Code, sus agentes heredarían estas variables y se
 // creerían sesiones hijas (no se guardan ni se pueden retomar). Lyra hace lo mismo en adaptadores/claude_code.py.
@@ -35,8 +37,20 @@ avisarCuota(() => void mandarCatalogo(true).catch(() => {}));
 void catalogo().catch(() => {});   // se arma al arrancar para que el diálogo lo tenga listo
 const servidor = createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
+  // El visor: GET /api/archivo?ruta=…&cwd=…, con el token en la cabecera X-Lyra-Token
+  if ((req.url || '').startsWith('/api/archivo?')) {
+    const url = new URL(req.url!, `http://127.0.0.1:${puerto}`);
+    const sitio = req.headers['sec-fetch-site'];
+    if (!validarConexion(token, String(req.headers['x-lyra-token'] || ''), `http://127.0.0.1:${puerto}`, puerto) || (sitio && sitio !== 'same-origin')) { res.writeHead(401); res.end(); return; }
+    try {
+      const a = await leerArchivo(url.searchParams.get('ruta') || '', url.searchParams.get('cwd') || '');
+      res.writeHead(200, { 'Content-Type': a.tipo, 'Cache-Control': 'no-store', 'X-Ruta': encodeURIComponent(a.ruta), 'Content-Security-Policy': "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; sandbox" });
+      res.end(req.method === 'HEAD' ? undefined : a.datos);
+    } catch (e) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(e instanceof Error ? e.message : 'No se pudo leer.'); }
+    return;
+  }
   const archivo = await archivoPublico(dist, req.url || '/');
   if (!archivo) { res.writeHead(404); res.end('No encontrado'); return; }
   try {
@@ -56,7 +70,7 @@ servidor.on('upgrade', (req, socket, head) => {
       try {
         const m = validarMensaje(JSON.parse(datos.toString())), cliente = clientes.get(ws)!;
         switch (m.t) {
-          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); break;
+          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); break;
           case 'foco': cliente.visible = m.visible; cliente.fecha = Date.now(); break;
           case 'crear': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.prompt }); cliente.agente = a.id; break; }
           case 'reanudar': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, prompt: m.texto, reanudar: m.sessionId }); cliente.agente = a.id; break; }
@@ -72,9 +86,12 @@ servidor.on('upgrade', (req, socket, head) => {
           case 'comandos': emitir({ t: 'comandos', agente: m.agente, comandos: await gestor.obtener(m.agente).motor.comandos() }); break;
           case 'catalogo': enviar(ws, { t: 'catalogo', proveedores: await catalogo(true) }); break;
           case 'abrir': await abrirCon(m.con, m.cwd); break;
+          case 'abrirArchivo': await abrirArchivo(m.ruta, m.cwd); break;
+          case 'guardarGrupos': emitir({ t: 'grupos', grupos: await guardarGrupos(m.grupos) }); break;
           case 'historial': emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'borrar': {
             const r = await gestor.borrar(m);
+            if (r.sessionId) { const g = await olvidarSesion(r.sessionId); if (g) emitir({ t: 'grupos', grupos: g }); }
             emitir({ t: 'borrada', sessionId: r.sessionId, agente: m.agente }); emitir({ t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'aviso', texto: r.texto }); break;
           }
           case 'renombrar': await gestor.renombrar(m); emitir({ t: 'historial', sesiones: await gestor.historial() }); break;

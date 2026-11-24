@@ -1,23 +1,64 @@
+// Barra de la izquierda: agentes abiertos, carpetas propias y las conversaciones anteriores por fecha.
+// Cada fila muestra sus acciones solo al pasar el cursor: mover a una carpeta y la papelera.
 import { useState } from 'preact/hooks';
 import type { Proveedor, ResumenAgente, Sesion } from '@protocolo';
-import { estado, elegir, enviar, avisar, pedirBorrar, renombrar } from '../tienda.ts';
+import { estado, elegir, enviar, avisar, borrar, renombrar, crearCarpeta, renombrarCarpeta, alternarCarpeta, borrarCarpeta, moverSesion } from '../tienda.ts';
 import type { Objetivo } from '../tienda.ts';
-import { TituloEditable } from './Acciones.tsx';
+import { BotonIcono, Desplegable, Papelera, TituloEditable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from '../util.ts';
 
 const GRUPOS = [
-  { clave: 'atencion', titulo: 'Necesitan tu atención', estados: ['esperando', 'error'] },
+  { clave: 'atencion', titulo: 'Te necesitan', estados: ['esperando', 'error'] },
   { clave: 'trabajando', titulo: 'Trabajando', estados: ['trabajando', 'iniciando'] },
-  { clave: 'listos', titulo: 'Listos', estados: ['listo', 'cerrado'] },
+  { clave: 'listos', titulo: 'Abiertos', estados: ['listo', 'cerrado'] },
 ] as const;
 
-/** ✎ y 🗑 de cada conversación (se ven al pasar el cursor o en la elegida) */
-function Acciones({ clave, objetivo }: { clave: string; objetivo: Objetivo }) {
+const DIA = 86400000;
+function tramo(fecha: number): string {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const t = hoy.getTime();
+  if (fecha >= t) return 'Hoy';
+  if (fecha >= t - DIA) return 'Ayer';
+  if (fecha >= t - 6 * DIA) return 'Esta semana';
+  if (fecha >= t - 30 * DIA) return 'Este mes';
+  return 'Antes';
+}
+const TRAMOS = ['Hoy', 'Ayer', 'Esta semana', 'Este mes', 'Antes'];
+
+/** Arrastrar una conversación a una carpeta */
+const ARRASTRE = 'application/x-lyra-sesion';
+function soltable(destino: string | null, marcado: string | null, setMarcado: (v: string | null) => void) {
+  const clave = destino ?? '';
+  return {
+    'data-soltar': marcado === clave ? 'true' : undefined,
+    onDragOver: (e: DragEvent) => { if (e.dataTransfer?.types.includes(ARRASTRE)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (marcado !== clave) setMarcado(clave); } },
+    onDragLeave: (e: DragEvent) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setMarcado(null); },
+    onDrop: (e: DragEvent) => { const s = e.dataTransfer?.getData(ARRASTRE); setMarcado(null); if (s) { e.preventDefault(); moverSesion(s, destino); } },
+  };
+}
+
+/** Ícono de carpeta: abre una lista corta con las carpetas */
+function Mover({ sessionId }: { sessionId: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const actual = estado.grupos.sesiones[sessionId];
   return (
-    <span class="agente-acciones">
-      <button class="agente-accion" data-accion="renombrar" title="Renombrar (F2)" aria-label="Renombrar" onClick={e => { e.stopPropagation(); estado.editando = clave; avisar(); }}><Icono nombre="editar" /></button>
-      <button class="agente-accion" data-accion="borrar" title="Borrar la conversación" aria-label="Borrar" onClick={e => { e.stopPropagation(); pedirBorrar(objetivo); }}><Icono nombre="papelera" /></button>
+    <span class="ancla">
+      <button type="button" class="agente-accion" data-accion="mover" title={actual ? 'Mover a otra carpeta' : 'Guardar en una carpeta'} aria-label="Mover a una carpeta"
+        onClick={e => { e.stopPropagation(); setAbierto(x => !x); }}><Icono nombre="carpeta" /></button>
+      {abierto && (
+        <Desplegable onCerrar={() => setAbierto(false)}>
+          {estado.grupos.carpetas.map(c => (
+            <button type="button" key={c.id} aria-current={c.id === actual ? 'true' : undefined} onClick={() => { moverSesion(sessionId, c.id); setAbierto(false); }}>
+              <Icono nombre="carpeta" tam={14} />{c.nombre}
+            </button>
+          ))}
+          <button type="button" onClick={() => { const id = crearCarpeta('Nueva carpeta'); moverSesion(sessionId, id); estado.editando = `carpeta:${id}`; setAbierto(false); avisar(); }}>
+            <Icono nombre="carpetaNueva" tam={14} />Nueva carpeta
+          </button>
+          {actual && <button type="button" onClick={() => { moverSesion(sessionId, null); setAbierto(false); }}><Icono nombre="sacar" tam={14} />Sacar de la carpeta</button>}
+        </Desplegable>
+      )}
     </span>
   );
 }
@@ -26,6 +67,7 @@ function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; on
   const objetivo: Objetivo = { proveedor: a.proveedor, titulo: a.titulo, agente: a.id, sessionId: a.sessionId, cwd: a.cwd, trabajando: a.estado === 'trabajando' };
   return (
     <li class="agente" data-estado={a.estado} data-proveedor={a.proveedor} aria-current={actual ? 'true' : undefined} onClick={onElegir}
+      draggable={!!a.sessionId} onDragStart={e => a.sessionId && e.dataTransfer?.setData(ARRASTRE, a.sessionId)}
       title={`${a.titulo}\n${nombreProveedor(a.proveedor)} · ${rutaCorta(a.cwd)}`}>
       <span class="agente-estado" />
       <div class="agente-texto">
@@ -33,85 +75,126 @@ function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; on
         <span class="agente-meta"><span class="proveedor-marca" data-proveedor={a.proveedor}>{nombreProveedor(a.proveedor)}</span> {nombreCarpeta(a.cwd)} · {a.estado === 'esperando' ? 'espera tu respuesta' : a.estado === 'error' ? 'se detuvo' : haceCuanto(a.ultimaActividad)}</span>
       </div>
       {a.sinLeer && !actual && <span class="agente-sinleer" title="Terminó y no lo has visto" />}
-      <Acciones clave={`agente:${a.id}`} objetivo={objetivo} />
-      <button class="agente-cerrar" title="Cerrar (la sesión queda en el historial)" onClick={e => { e.stopPropagation(); enviar({ t: 'cerrar', agente: a.id }); }}>×</button>
+      <span class="agente-acciones">
+        {a.sessionId && <Mover sessionId={a.sessionId} />}
+        <Papelera titulo="Borrar la conversación" onBorrar={() => borrar(objetivo)} />
+        <button type="button" class="agente-accion" title="Cerrar (queda guardada)" aria-label="Cerrar" onClick={e => { e.stopPropagation(); enviar({ t: 'cerrar', agente: a.id }); }}><Icono nombre="cerrar" /></button>
+      </span>
     </li>
   );
 }
 
-function Historial({ sesiones, onElegir }: { sesiones: Sesion[]; onElegir: () => void }) {
-  const [filtro, setFiltro] = useState<Proveedor | ''>('');
-  const [busqueda, setBusqueda] = useState('');
-  const abiertas = new Set(estado.agentes.map(a => a.sessionId).filter(Boolean));
-  const porCarpeta = new Map<string, Sesion[]>();
-  const q = busqueda.trim().toLowerCase();
-  const hay = new Set(sesiones.map(s => s.proveedor));
-  for (const s of sesiones) {
-    if (abiertas.has(s.sessionId)) continue;
-    if (filtro && s.proveedor !== filtro) continue;
-    if (q && !`${s.titulo} ${s.cwd}`.toLowerCase().includes(q)) continue;
-    const l = porCarpeta.get(s.cwd) || []; l.push(s); porCarpeta.set(s.cwd, l);
-  }
-  const carpetas = [...porCarpeta.entries()].sort((a, b) => b[1][0]!.modificado - a[1][0]!.modificado);
+function Fila({ s, onElegir }: { s: Sesion; onElegir: () => void }) {
   const v = estado.vista;
-  if (!sesiones.length) return null;
+  const objetivo: Objetivo = { proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd };
   return (
-    <section class="grupo" data-grupo="historial">
-      <h3 class="grupo-titulo">Historial <span class="grupo-cuenta">{carpetas.reduce((n, c) => n + c[1].length, 0)}</span></h3>
-      <div class="historial-filtros">
-        <input type="search" class="historial-buscar" placeholder="Buscar…" value={busqueda} onInput={e => setBusqueda((e.currentTarget as HTMLInputElement).value)} />
-        {hay.size > 1 && (
-          <div class="historial-proveedores">
-            <button type="button" aria-pressed={!filtro} onClick={() => setFiltro('')}>Todos</button>
-            {PROVEEDORES.filter(p => hay.has(p.id)).map(p => <button type="button" key={p.id} data-proveedor={p.id} aria-pressed={filtro === p.id} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}>{p.nombre}</button>)}
-          </div>
-        )}
+    <li class="agente" data-estado="historial" data-proveedor={s.proveedor} aria-current={v?.tipo === 'sesion' && v.sessionId === s.sessionId ? 'true' : undefined}
+      draggable onDragStart={e => e.dataTransfer?.setData(ARRASTRE, s.sessionId)}
+      title={`${s.titulo}\n${nombreProveedor(s.proveedor)} · ${rutaCorta(s.cwd)}`} onClick={() => { elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor }); onElegir(); }}>
+      <span class="agente-estado" />
+      <div class="agente-texto">
+        <TituloEditable clave={`sesion:${s.sessionId}`} titulo={s.titulo} clase="agente-titulo" onGuardar={t => renombrar(objetivo, t)} />
+        <span class="agente-meta"><span class="proveedor-marca" data-proveedor={s.proveedor}>{nombreProveedor(s.proveedor)}</span> {nombreCarpeta(s.cwd)} · {haceCuanto(s.modificado)}</span>
       </div>
-      {!carpetas.length && <p class="historial-vacio">Nada coincide.</p>}
-      {carpetas.map(([cwd, lista]) => (
-        <details class="historial-carpeta" key={cwd} open={!!q || (v?.tipo === 'sesion' && v.cwd === cwd)}>
-          <summary title={rutaCorta(cwd)}>{nombreCarpeta(cwd)} <span class="grupo-cuenta">{lista.length}</span></summary>
-          <ul class="grupo-lista">
-            {lista.map(s => (
-              <li key={s.proveedor + s.sessionId} class="agente" data-estado="historial" data-proveedor={s.proveedor} aria-current={v?.tipo === 'sesion' && v.sessionId === s.sessionId ? 'true' : undefined}
-                title={s.titulo} onClick={() => { elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor }); onElegir(); }}>
-                <span class="agente-estado" />
-                <div class="agente-texto">
-                  <TituloEditable clave={`sesion:${s.sessionId}`} titulo={s.titulo} clase="agente-titulo" onGuardar={t => renombrar({ proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd }, t)} />
-                  <span class="agente-meta"><span class="proveedor-marca" data-proveedor={s.proveedor}>{nombreProveedor(s.proveedor)}</span> {haceCuanto(s.modificado)}{s.rama ? ` · ${s.rama}` : ''}</span>
-                </div>
-                <Acciones clave={`sesion:${s.sessionId}`} objetivo={{ proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd }} />
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
-    </section>
+      <span class="agente-acciones">
+        <Mover sessionId={s.sessionId} />
+        <Papelera titulo="Borrar la conversación" onBorrar={() => borrar(objetivo)} />
+      </span>
+    </li>
   );
 }
 
 export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void }) {
+  const [filtro, setFiltro] = useState<Proveedor | ''>('');
+  const [busqueda, setBusqueda] = useState('');
+  const [abiertos, setAbiertos] = useState<Set<string>>(() => new Set(['Hoy', 'Ayer', 'Esta semana']));
+  const [marcado, setMarcado] = useState<string | null>(null);
   const v = estado.vista;
-  const agentes = [...estado.agentes].sort((a, b) => b.ultimaActividad - a.ultimaActividad);
+  const q = busqueda.trim().toLowerCase();
+  const pasa = (titulo: string, cwd: string, p: Proveedor) => (!filtro || p === filtro) && (!q || `${titulo} ${cwd}`.toLowerCase().includes(q));
+
+  const agentes = [...estado.agentes].sort((a, b) => b.ultimaActividad - a.ultimaActividad).filter(a => pasa(a.titulo, a.cwd, a.proveedor));
+  const abiertas = new Set(estado.agentes.map(a => a.sessionId).filter(Boolean));
+  const { carpetas, sesiones: enCarpeta } = estado.grupos;
+  const porCarpeta = new Map<string, Sesion[]>(carpetas.map(c => [c.id, []]));
+  const porTramo = new Map<string, Sesion[]>();
+  for (const s of estado.historial) {
+    if (abiertas.has(s.sessionId) || !pasa(s.titulo, s.cwd, s.proveedor)) continue;
+    const c = enCarpeta[s.sessionId];
+    if (c && porCarpeta.has(c)) porCarpeta.get(c)!.push(s);
+    else { const t = tramo(s.modificado); porTramo.set(t, [...(porTramo.get(t) || []), s]); }
+  }
+  const hay = new Set(estado.historial.map(s => s.proveedor));
+  const elegirAgente = (id: string) => { elegir({ tipo: 'agente', id }); onCerrarCajon(); };
+
   return (
     <aside class="agentes" data-abierto={String(abierta)}>
       <header class="agentes-cabecera">
         <span class="marca">Lyra</span>
-        <button class="boton-nuevo" title="Nuevo agente (Alt+N)" onClick={onNuevo}>+ Nuevo</button>
+        <BotonIcono icono="carpetaNueva" titulo="Nueva carpeta" onClick={() => { const id = crearCarpeta('Nueva carpeta'); estado.editando = `carpeta:${id}`; avisar(); }} />
+        <BotonIcono icono="nuevo" titulo="Agente nuevo (Alt+N)" clase="icono-boton-lima" aria-current={v === null ? 'true' : undefined} onClick={onNuevo} />
       </header>
+      <div class="buscador">
+        <input type="search" class="buscador-campo" placeholder="Buscar…" value={busqueda} onInput={e => setBusqueda((e.currentTarget as HTMLInputElement).value)} />
+        {hay.size > 1 && PROVEEDORES.filter(p => hay.has(p.id)).map(p => (
+          <button type="button" key={p.id} class="buscador-proveedor" data-proveedor={p.id} aria-pressed={filtro === p.id} title={`Solo ${p.nombre}`} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}><span class="proveedor-punto" /></button>
+        ))}
+      </div>
+
       {GRUPOS.map(g => {
         const lista = agentes.filter(a => (g.estados as readonly string[]).includes(a.estado));
         if (!lista.length) return null;
         return (
           <section class="grupo" data-grupo={g.clave} key={g.clave}>
             <h3 class="grupo-titulo">{g.titulo} <span class="grupo-cuenta">{lista.length}</span></h3>
-            <ul class="grupo-lista">
-              {lista.map(a => <Agente key={a.id} a={a} actual={v?.tipo === 'agente' && v.id === a.id} onElegir={() => { elegir({ tipo: 'agente', id: a.id }); onCerrarCajon(); }} />)}
-            </ul>
+            <ul class="grupo-lista">{lista.map(a => <Agente key={a.id} a={a} actual={v?.tipo === 'agente' && v.id === a.id} onElegir={() => elegirAgente(a.id)} />)}</ul>
           </section>
         );
       })}
-      <Historial sesiones={estado.historial} onElegir={onCerrarCajon} />
+
+      {carpetas.length > 0 && (
+        <section class="grupo" data-grupo="carpetas">
+          <h3 class="grupo-titulo">Carpetas</h3>
+          {carpetas.map(c => {
+            const lista = porCarpeta.get(c.id) || [];
+            if (q && !lista.length && !c.nombre.toLowerCase().includes(q)) return null;
+            const abierta = c.abierta || !!q;
+            return (
+              <div class="carpeta" key={c.id} data-abierta={String(abierta)} {...soltable(c.id, marcado, setMarcado)}>
+                <div class="carpeta-cabecera" role="button" tabIndex={0} onClick={() => alternarCarpeta(c.id)} onKeyDown={e => e.key === 'Enter' && alternarCarpeta(c.id)}>
+                  <span class="carpeta-flecha" />
+                  <Icono nombre="carpeta" tam={14} />
+                  <TituloEditable clave={`carpeta:${c.id}`} titulo={c.nombre} clase="carpeta-nombre" onGuardar={t => renombrarCarpeta(c.id, t)} />
+                  <span class="grupo-cuenta">{lista.length}</span>
+                  <span class="agente-acciones"><Papelera titulo="Borrar la carpeta (las conversaciones no se borran)" onBorrar={() => borrarCarpeta(c.id)} /></span>
+                </div>
+                {abierta && (lista.length
+                  ? <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} />)}</ul>
+                  : <p class="carpeta-vacia">Arrastra conversaciones aquí</p>)}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {porTramo.size > 0 && (
+        <section class="grupo" data-grupo="historial" {...soltable(null, marcado, setMarcado)}>
+          {TRAMOS.filter(t => porTramo.has(t)).map(t => {
+            const lista = porTramo.get(t)!, abierto = abiertos.has(t) || !!q;
+            return (
+              <div key={t} class="tramo" data-abierto={String(abierto)}>
+                <h3 class="grupo-titulo tramo-titulo">
+                  <button type="button" class="tramo-boton" aria-expanded={abierto} onClick={() => setAbiertos(prev => { const n = new Set(prev); if (n.has(t)) n.delete(t); else n.add(t); return n; })}>
+                    <span class="carpeta-flecha" />{t} <span class="grupo-cuenta">{lista.length}</span>
+                  </button>
+                </h3>
+                {abierto && <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} />)}</ul>}
+              </div>
+            );
+          })}
+        </section>
+      )}
+      {(q || filtro) && !agentes.length && !porTramo.size && ![...porCarpeta.values()].some(l => l.length) && <p class="historial-vacio">Nada coincide.</p>}
     </aside>
   );
 }

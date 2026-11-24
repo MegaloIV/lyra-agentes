@@ -1,9 +1,16 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Proveedor } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Proveedor, Grupos, PermissionMode } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
+/** `null`: un agente nuevo, todavía sin crear (se crea al mandar el primer mensaje) */
 export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string; proveedor?: Proveedor } | null;
+/** Con qué se crea el próximo agente; se recuerda entre sesiones */
+export type Borrador = { proveedor: Proveedor; modelo: string; esfuerzo: string; modo: PermissionMode; cwd: string };
+export type Panel = 'indice' | 'visor' | null;
+
+function leerLocal<T>(clave: string, defecto: T): T { try { const v = localStorage.getItem(clave); return v ? { ...defecto, ...JSON.parse(v) } as T : defecto; } catch { return defecto; } }
+export function guardarLocal(clave: string, valor: unknown) { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch {} }
 export type Documento = { bloques: Bloque[]; soloLectura: boolean };
 
 export const estado = {
@@ -18,7 +25,12 @@ export const estado = {
   errores: [] as { id: number; texto: string; nivel: 'error' | 'info' }[],
   /** Qué título se está renombrando: `agente:<id>` o `sesion:<sessionId>` */
   editando: null as string | null,
-  confirmar: null as { titulo: string; texto: string; boton: string; al: () => void } | null,
+  grupos: { carpetas: [], sesiones: {} } as Grupos,
+  borrador: leerLocal<Borrador>('lyra-borrador', { proveedor: 'claude', modelo: '', esfuerzo: '', modo: 'default', cwd: '' }),
+  /** Panel de la derecha: índice, visor de archivos o cerrado */
+  panel: leerLocal<{ v: Panel }>('lyra-panel', { v: 'indice' }).v,
+  /** Lo que muestra el visor (`vez` cambia al pedir el mismo archivo otra vez) */
+  visor: null as { ruta: string; cwd: string; vez: number } | null,
   carpeta: { ruta: null as string | null, vez: 0 },
   primeraLista: false,
 };
@@ -42,6 +54,13 @@ function leerToken(): string {
 }
 const token = leerToken();
 
+/** Lee un archivo para el visor (el servidor comprueba el token y la ruta) */
+export async function leerArchivo(ruta: string, cwd: string): Promise<{ tipo: string; datos: Blob; ruta: string }> {
+  const r = await fetch(`/api/archivo?ruta=${encodeURIComponent(ruta)}&cwd=${encodeURIComponent(cwd)}`, { headers: { 'X-Lyra-Token': token }, cache: 'no-store' });
+  if (!r.ok) throw new Error((await r.text()) || 'No se pudo leer el archivo.');
+  return { tipo: r.headers.get('Content-Type') || '', datos: await r.blob(), ruta: decodeURIComponent(r.headers.get('X-Ruta') || '') || ruta };
+}
+
 let ws: WebSocket | null = null, espera = 1000, esperandoNuevo = 0, numeroError = 0;
 
 export function enviar(m: ClienteMensaje) {
@@ -59,17 +78,49 @@ export function mostrarError(texto: string, nivel: 'error' | 'info' = 'error') {
 /** Una conversación: abierta (`agente`) o del historial (`sessionId`) */
 export type Objetivo = { proveedor: Proveedor; titulo: string; agente?: string; sessionId?: string; cwd?: string; trabajando?: boolean };
 
-export function pedirBorrar(o: Objetivo) {
-  const donde = o.proveedor === 'codex' ? 'Codex la archiva: deja de aparecer aquí y en Codex, pero no se pierde.'
-    : !o.sessionId && o.agente ? 'Todavía no tiene nada guardado.'
-    : 'Va a la papelera del escritorio: puedes recuperarla desde el gestor de archivos.';
-  estado.confirmar = {
-    titulo: '¿Borrar esta conversación?',
-    texto: `«${o.titulo}». ${o.trabajando ? 'El agente está trabajando y se va a detener. ' : o.agente ? 'Se cierra el agente. ' : ''}${donde}`,
-    boton: 'Borrar',
-    al: () => enviar({ t: 'borrar', proveedor: o.proveedor, sessionId: o.sessionId, agente: o.agente }),
-  };
+/** Claude y Gemini van a la papelera del escritorio; Codex se archiva. Nunca es definitivo. */
+export function borrar(o: Objetivo) { enviar({ t: 'borrar', proveedor: o.proveedor, sessionId: o.sessionId, agente: o.agente }); }
+
+export function cambiarBorrador(cambios: Partial<Borrador>) {
+  estado.borrador = { ...estado.borrador, ...cambios };
+  guardarLocal('lyra-borrador', estado.borrador);
   avisar();
+}
+
+export function abrirPanel(p: Panel) {
+  estado.panel = p;
+  guardarLocal('lyra-panel', { v: p });
+  avisar();
+}
+/** Muestra un archivo en el visor (la ruta puede ser relativa a la carpeta del agente) */
+export function ver(ruta: string, cwd: string) {
+  estado.visor = { ruta, cwd, vez: (estado.visor?.vez || 0) + 1 };
+  abrirPanel('visor');
+}
+
+// Carpetas propias: se manda el estado entero y el servidor lo guarda y lo reparte
+function grupos(g: Grupos) { estado.grupos = g; avisar(); enviar({ t: 'guardarGrupos', grupos: g }); }
+export function crearCarpeta(nombre: string): string {
+  const id = Math.random().toString(36).slice(2, 10);
+  grupos({ ...estado.grupos, carpetas: [...estado.grupos.carpetas, { id, nombre: nombre.trim() || 'Carpeta', abierta: true }] });
+  return id;
+}
+export function renombrarCarpeta(id: string, nombre: string) {
+  estado.editando = null;
+  if (nombre.trim()) grupos({ ...estado.grupos, carpetas: estado.grupos.carpetas.map(c => c.id === id ? { ...c, nombre: nombre.trim() } : c) });
+  else avisar();
+}
+export function alternarCarpeta(id: string) {
+  grupos({ ...estado.grupos, carpetas: estado.grupos.carpetas.map(c => c.id === id ? { ...c, abierta: !c.abierta } : c) });
+}
+/** Las conversaciones de la carpeta no se borran: vuelven a la lista general */
+export function borrarCarpeta(id: string) {
+  grupos({ carpetas: estado.grupos.carpetas.filter(c => c.id !== id), sesiones: Object.fromEntries(Object.entries(estado.grupos.sesiones).filter(([, c]) => c !== id)) });
+}
+export function moverSesion(sessionId: string, carpeta: string | null) {
+  const sesiones = { ...estado.grupos.sesiones };
+  if (carpeta) sesiones[sessionId] = carpeta; else delete sesiones[sessionId];
+  grupos({ carpetas: estado.grupos.carpetas.map(c => c.id === carpeta ? { ...c, abierta: true } : c), sesiones });
 }
 
 export function renombrar(o: Objetivo, titulo: string) {
@@ -149,6 +200,7 @@ function recibir(m: ServidorMensaje) {
       if (v && (v.tipo === 'sesion' ? v.sessionId === m.sessionId : v.id === m.agente)) elegir(null);
       break;
     }
+    case 'grupos': estado.grupos = m.grupos; break;
     case 'enfocar': if (estado.agentes.some(a => a.id === m.agente)) elegir({ tipo: 'agente', id: m.agente }); break;
   }
   avisar();

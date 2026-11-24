@@ -13,6 +13,8 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'abrirSesion': case 'reanudar': valido = texto('sessionId') && !!m.sessionId && texto('cwd') && !!m.cwd && texto('texto', true) && proveedorValido(m.proveedor); break;
     case 'esfuerzo': valido = texto('agente') && (m.esfuerzo === null || texto('esfuerzo')); break;
     case 'abrir': valido = ['antigravity', 'terminal', 'carpeta', 'loginGemini'].includes(String(m.con)) && texto('cwd', true); break;
+    case 'abrirArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true); break;
+    case 'guardarGrupos': valido = m.grupos !== null && typeof m.grupos === 'object'; break;
     case 'enviar': valido = texto('agente') && texto('texto'); break;
     case 'interrumpir': case 'cerrar': case 'leer': case 'comandos': valido = texto('agente'); break;
     case 'modelo': valido = texto('agente') && (m.modelo === null || texto('modelo')); break;

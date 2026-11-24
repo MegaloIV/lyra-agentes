@@ -10,7 +10,19 @@ md.renderer.rules.fence = (tokens, i) => {
 md.renderer.rules.table_open = () => '<div class="tabla"><table>';
 md.renderer.rules.table_close = () => '</table></div>';
 const enlace = md.renderer.rules.link_open || ((t, i, o, _e, s) => s.renderToken(t, i, o));
-md.renderer.rules.link_open = (t, i, o, e, s) => { t[i]!.attrSet('target', '_blank'); t[i]!.attrSet('rel', 'noopener'); return enlace(t, i, o, e, s); };
+md.renderer.rules.link_open = (t, i, o, e, s) => {
+  const href = String(t[i]!.attrGet('href') || '');
+  // Un enlace a un archivo local se abre en el visor (lo atiende el clic del documento)
+  if (href && !href.startsWith('#') && (!/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('file://'))) t[i]!.attrSet('data-ruta', href.replace(/^file:\/\//, ''));
+  else { t[i]!.attrSet('target', '_blank'); t[i]!.attrSet('rel', 'noopener'); }
+  return enlace(t, i, o, e, s);
+};
+/** `web/main.tsx`, `~/notas.md:12`: rutas que se pueden abrir en el visor */
+const RUTA = /^(?:~\/|\.{1,2}\/|\/)?(?:[\w.@+-]+\/)*[\w@+-][\w.@+-]*\.(?:md|markdown|txt|pdf|html?|png|jpe?g|gif|webp|svg|csv|tsv|json|jsonl|tsx?|jsx?|mjs|py|sh|css|toml|ya?ml|lua|rs|go|c|h|cpp|java|sql|tex|ini|conf|xml|log|docx?|xlsx?|pptx?|odt)(?::\d+(?::\d+)?)?$/i;
+md.renderer.rules.code_inline = (tokens, i) => {
+  const c = tokens[i]!.content, e = md.utils.escapeHtml(c);
+  return RUTA.test(c) ? `<code class="ruta" data-ruta="${e}" title="Ver en el panel">${e}</code>` : `<code>${e}</code>`;
+};
 export function renderizar(texto: string, prefijo = ''): string {
   let numero = 0;
   const tokens = md.parse(texto, {});

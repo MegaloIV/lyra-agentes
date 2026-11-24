@@ -4,7 +4,7 @@ import hljs from 'highlight.js/lib/common';
 import type { Bloque, Detalle, Solicitud } from '@protocolo';
 import { detalleHerramienta } from '../../servidor/resumenes.ts';
 import { renderizar, renderizarLinea, encabezados } from '../md.ts';
-import { enviar } from '../tienda.ts';
+import { enviar, ver } from '../tienda.ts';
 import { Icono } from './iconos.tsx';
 import { contarAcciones, duracion, hora, lenguajeDe, textoPlano, type Herr } from '../util.ts';
 
@@ -47,7 +47,7 @@ function Md({ texto, clase = 'md', prefijo = '', enCurso }: { texto: string; cla
   return <div class={clase} data-en-curso={enCurso === undefined ? undefined : String(enCurso)} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-function Codigo({ texto, lenguaje }: { texto: string; lenguaje?: string }) {
+export function Codigo({ texto, lenguaje }: { texto: string; lenguaje?: string }) {
   const html = useMemo(() => {
     if (lenguaje && hljs.getLanguage(lenguaje) && texto.length < 60000) return hljs.highlight(texto, { language: lenguaje }).value;
     const d = document.createElement('div'); d.textContent = texto; return d.innerHTML;
@@ -77,8 +77,16 @@ function detalleDe(h: Herr): Detalle | undefined {
   return h.detalle;
 }
 
+/** La ruta que se puede abrir en el visor: archivos creados, editados, leídos o imágenes generadas */
+function rutaVisible(h: Herr): string {
+  if (h.estado === 'error' || !['leer', 'editar', 'crear', 'imagen'].includes(h.icono)) return '';
+  const e = (h.entrada || {}) as Record<string, unknown>, r = e.file_path || e.notebook_path || e.absolute_path || e.path;
+  return typeof r === 'string' ? r : '';
+}
+
 function Herramienta({ h, hijos, cwd }: { h: Herr; hijos: Hijos; cwd: string }) {
   const [abierto, setAbierto] = useState(false);
+  const ruta = rutaVisible(h);
   const sub = hijos.get(h.id);
   const resumen = useMemo(() => renderizarLinea(h.resumen), [h.resumen]);
   const d = abierto ? detalleDe(h) : undefined;
@@ -88,6 +96,7 @@ function Herramienta({ h, hijos, cwd }: { h: Herr; hijos: Hijos; cwd: string }) 
         <summary>
           <span class="herramienta-icono"><Icono nombre={h.icono} /></span>
           <span class="herramienta-texto" dangerouslySetInnerHTML={{ __html: resumen + (sub?.length ? ` <span class="herramienta-sub">· ${sub.filter(b => b.tipo === 'herramienta').length} acciones</span>` : '') }} />
+          {ruta && <button type="button" class="herramienta-ver" title="Ver en el panel" aria-label="Ver en el panel" onClick={e => { e.preventDefault(); e.stopPropagation(); ver(ruta, cwd); }}><Icono nombre="visor" tam={14} /></button>}
         </summary>
         {abierto && (
           <div class="herramienta-detalle">

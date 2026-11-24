@@ -14,11 +14,28 @@ const trazos: Record<string, string> = {
   mcp: 'M6 2v3 M10 2v3 M4 5h8v3a4 4 0 0 1-8 0z M8 12v2.5',
   otro: 'M3 8h.1 M8 8h.1 M13 8h.1',
   papelera: 'M2.5 4.5h11 M6 4.5V3h4v1.5 M4 4.5l.7 9h6.6l.7-9 M6.8 7v4.5 M9.2 7v4.5',
+  imagen: 'M2.5 3h11v10h-11z M2.5 11l3.2-3.2 2.6 2.6 1.7-1.7 3.5 3.3 M10.5 5.8h.1',
+  nuevo: 'M8 3v10 M3 8h10',
+  carpeta: 'M2 4.5V12.5h12V5.5H8L6.5 3.5H2z',
+  carpetaNueva: 'M2 4.5V12.5h12V5.5H8L6.5 3.5H2z M8 7.3v3.6 M6.2 9.1h3.6',
+  sacar: 'M2 4.5V12.5h12V5.5H8L6.5 3.5H2z M6.2 9.1h3.6',
+  indice: 'M5.5 4h8 M5.5 8h8 M5.5 12h8 M2.5 4h.1 M2.5 8h.1 M2.5 12h.1',
+  visor: 'M2 3h12v10H2z M9.5 3v10 M4 6h3.5 M4 8.5h3.5',
+  abrir: 'M9 2.5h4.5V7 M13.5 2.5L7.5 8.5 M12 9.5v4H2.5V4h4',
+  codigo: 'M5.5 4.5L2 8l3.5 3.5 M10.5 4.5L14 8l-3.5 3.5 M9 3l-2 10',
+  descargar: 'M8 2.5v7.5 M4.8 7L8 10.2 11.2 7 M2.5 13.5h11',
+  copiar: 'M5.5 5.5h8v8h-8z M10.5 5.5V2.5h-8v8h3',
+  cerrar: 'M4 4l8 8 M12 4l-8 8',
+  recargar: 'M13 8a5 5 0 1 1-1.5-3.6 M13 2.5v2.5h-2.5',
+  enviar: 'M8 13V3.5 M4 7.5l4-4 4 4',
+  detener: 'M4.5 4.5h7v7h-7z',
+  chispa: 'M8 2v3 M8 11v3 M2 8h3 M11 8h3 M4 4l1.8 1.8 M10.2 10.2L12 12 M12 4l-1.8 1.8 M5.8 10.2L4 12',
+  escudo: 'M8 2l5 2v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z',
 };
 
-export function Icono({ nombre }: { nombre: string }) {
+export function Icono({ nombre, tam = 16 }: { nombre: string; tam?: number }) {
   return (
-    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 16 16" width={tam} height={tam} fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d={trazos[nombre] || trazos.otro} />
     </svg>
   );

@@ -90,7 +90,12 @@ export function bloquesDeItem(item: Item, cwd: string): Bloque[] {
       const resumen = accion.type === 'openPage' && url ? `Abrió ${dominio}` : `Buscó en la web «${cadena(item.query) || cadena(accion.query) || '…'}»`;
       return [herramienta(id, 'WebSearch', resumen, 'web', 'ok', { query: item.query, url }, { clase: 'md', texto: url || cadena(item.query) })];
     }
-    case 'imageView': return [herramienta(id, 'Read', `Miró la imagen \`${rutaRelativa(cadena(item.path), cwd)}\``, 'leer', 'ok', { file_path: item.path })];
+    case 'imageView': return [herramienta(id, 'Read', `Miró la imagen \`${rutaRelativa(cadena(item.path), cwd)}\``, 'imagen', 'ok', { file_path: item.path })];
+    case 'imageGeneration': {
+      const ruta = cadena(item.savedPath), fallo = objeto(item.failure);
+      return [herramienta(id, 'GenerarImagen', ruta ? `Generó la imagen \`${rutaRelativa(ruta, cwd)}\`` : 'Generó una imagen', 'imagen', estadoDe(item.status, !item.failure), { file_path: ruta || undefined, prompt: item.revisedPrompt },
+        { clase: 'md', texto: cadena(fallo.message) || cadena(item.revisedPrompt) || 'Sin descripción.' })];
+    }
     case 'contextCompaction': return [{ tipo: 'sistema', id, texto: 'Se resumió la conversación para liberar contexto', nivel: 'info' }];
     case 'enteredReviewMode': return [{ tipo: 'sistema', id, texto: 'Empezó una revisión del código', nivel: 'info' }];
     case 'exitedReviewMode': return [{ tipo: 'texto', id, md: cadena(item.review), enCurso: false }];

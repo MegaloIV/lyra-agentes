@@ -23,6 +23,8 @@ export type Modelo = { valor: string | null; nombre: string; descripcion?: strin
 /** Lo que se puede elegir de cada proveedor. `cuota`: cuánto queda (Codex) */
 export type InfoProveedor = { id: Proveedor; nombre: string; instalado: boolean; sesion: boolean; modelos: Modelo[]; modos: { valor: PermissionMode; nombre: string }[]; cuota?: { usado: number; renueva?: number; agotada: boolean } };
 export type Comando = { nombre: string; descripcion: string };
+/** Carpetas propias del usuario y en cuál está cada sesión (`sessionId` → id de carpeta) */
+export type Grupos = { carpetas: { id: string; nombre: string; abierta: boolean }[]; sesiones: Record<string, string> };
 export type ClienteMensaje =
   | { t: 'hola' | 'historial' | 'elegirCarpeta' }
   | { t: 'crear'; cwd: string; proveedor?: Proveedor; modelo?: string; esfuerzo?: string; modo?: PermissionMode; prompt?: string }
@@ -34,6 +36,9 @@ export type ClienteMensaje =
   | { t: 'esfuerzo'; agente: string; esfuerzo: string | null }
   | { t: 'catalogo' }
   | { t: 'abrir'; con: 'antigravity' | 'terminal' | 'carpeta' | 'loginGemini'; cwd?: string }
+  /** Abre un archivo con su app (`ruta` relativa a `cwd`) */
+  | { t: 'abrirArchivo'; ruta: string; cwd?: string }
+  | { t: 'guardarGrupos'; grupos: Grupos }
   | { t: 'abrirSesion'; sessionId: string; cwd: string; proveedor?: Proveedor }
   | { t: 'reanudar'; sessionId: string; cwd: string; proveedor?: Proveedor; texto?: string }
   | { t: 'foco'; visible: boolean }
@@ -51,7 +56,8 @@ export type ServidorMensaje =
   | { t: 'error'; texto: string }
   | { t: 'aviso'; texto: string }
   | { t: 'borrada'; sessionId?: string; agente?: string }
-  | { t: 'enfocar'; agente: string };
+  | { t: 'enfocar'; agente: string }
+  | { t: 'grupos'; grupos: Grupos };
 export function aplicarOps(bloques: Bloque[], ops: Op[]): Bloque[] {
   const salida = [...bloques];
   for (const op of ops) {

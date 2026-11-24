@@ -1,24 +1,20 @@
 import { render } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks';
 import './estilo.css';
-import { estado, suscribir, elegir, enviar, avisar, pedirBorrar, renombrar } from './tienda.ts';
+import { estado, suscribir, elegir, enviar, avisar, renombrar, abrirPanel, ver, guardarLocal, mostrarError, type Panel } from './tienda.ts';
 import type { Objetivo } from './tienda.ts';
-import { Confirmar, TituloEditable } from './componentes/Acciones.tsx';
+import { BotonIcono, TituloEditable } from './componentes/Acciones.tsx';
 import { Barra } from './componentes/Barra.tsx';
 import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Documento.tsx';
 import { Redactor } from './componentes/Redactor.tsx';
-import { DialogoNuevo } from './componentes/Dialogo.tsx';
-import type { PermissionMode } from '@protocolo';
-import { aMarkdown, haceCuanto, info, miles, modeloDe, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from './util.ts';
-
-function leerPreferencia(clave: string, defecto: boolean) {
-  try { const v = localStorage.getItem(clave); return v === null ? defecto : v === '1'; } catch { return defecto; }
-}
+import { Visor, archivosDe } from './componentes/Visor.tsx';
+import type { Bloque } from '@protocolo';
+import { aMarkdown, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from './util.ts';
 
 function Indice({ entradas, activo, onIr }: { entradas: Entrada[]; activo: string; onIr: (id: string) => void }) {
   return (
     <nav class="indice">
-      <h3 class="indice-titulo">En esta conversación</h3>
+      {!entradas.length && <p class="visor-nota">El índice se arma con tus mensajes y los títulos de las respuestas.</p>}
       <ol class="indice-lista">
         {entradas.map(e => (
           <li key={e.id}><a data-nivel={e.nivel} class={e.id === activo ? 'activo' : undefined} href={'#' + e.id}
@@ -29,7 +25,7 @@ function Indice({ entradas, activo, onIr }: { entradas: Entrada[]; activo: strin
   );
 }
 
-function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVista: string; bloques: Parameters<typeof armarTurnos>[0]; cwd: string; quien: string; onEntradas: (e: Entrada[], activo: string) => void; irA: { id: string; vez: number } }) {
+function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVista: string; bloques: Bloque[]; cwd: string; quien: string; onEntradas: (e: Entrada[], activo: string) => void; irA: { id: string; vez: number } }) {
   const ref = useRef<HTMLDivElement>(null);
   const alFinal = useRef(true);
   const [nuevo, setNuevo] = useState(false);
@@ -69,9 +65,13 @@ function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVis
     if (!programado) { programado = true; requestAnimationFrame(() => { programado = false; calcularActivo(); }); }
   }
 
-  // Botón «Copiar» de los bloques de código
   function clic(e: MouseEvent) {
-    const boton = (e.target as HTMLElement).closest('.copiar');
+    const objetivo = e.target as HTMLElement;
+    // Una ruta del texto (`archivo.md` o un enlace a un archivo): al visor
+    const ruta = objetivo.closest<HTMLElement>('[data-ruta]');
+    if (ruta) { e.preventDefault(); ver(ruta.dataset.ruta!, cwd); return; }
+    // Botón «Copiar» de los bloques de código
+    const boton = objetivo.closest('.copiar');
     if (!boton) return;
     const codigo = boton.parentElement?.nextElementSibling?.textContent || '';
     void navigator.clipboard.writeText(codigo).then(() => { boton.textContent = 'Copiado'; setTimeout(() => { boton.textContent = 'Copiar'; }, 1500); });
@@ -89,30 +89,20 @@ function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVis
   );
 }
 
-type Opcion = { texto: string; nota?: string; actual?: boolean; al: () => void };
-function Menu({ ancla, opciones, onCerrar }: { ancla: string; opciones: Opcion[]; onCerrar: () => void }) {
-  useEffect(() => {
-    const fuera = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest(`.menu, [data-chip="${ancla}"]`)) onCerrar(); };
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onCerrar(); };
-    document.addEventListener('mousedown', fuera); document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', esc); };
-  }, []);
-  return (
-    <div class="menu" role="menu">
-      {opciones.map(o => (
-        <button key={o.texto} type="button" role="menuitem" aria-current={o.actual ? 'true' : undefined} title={o.nota} onClick={() => { o.al(); onCerrar(); }}>{o.texto}</button>
-      ))}
-    </div>
-  );
-}
-
 function guardarArchivo(nombre: string, texto: string) {
   const url = URL.createObjectURL(new Blob([texto], { type: 'text/markdown;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = nombre; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
+const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
 
+/** Ancho del panel derecho, uno para el índice y otro para el visor; se cambia arrastrando su borde */
+function leerAnchos(): Record<'indice' | 'visor', number> {
+  try { return { indice: 240, visor: 460, ...JSON.parse(localStorage.getItem('lyra-anchos') || '{}') }; } catch { return { indice: 240, visor: 460 }; }
+}
+
+/** Archivos ya vistos por conversación, para el punto del visor y para abrirlo solo con una imagen nueva */
+const vistos = new Map<string, Set<string>>();
 
 function App() {
   const [, forzar] = useReducer((x: number) => x + 1, 0);
@@ -120,15 +110,16 @@ function App() {
   useEffect(() => suscribir(refrescar), []);
   useEffect(() => { const t = setInterval(refrescar, 30000); return () => clearInterval(t); }, []);   // «hace 3 min»
 
-  const [indiceAncho, setIndiceAncho] = useState(() => leerPreferencia('lyra-indice', true));
-  const [indiceAngosto, setIndiceAngosto] = useState(false);   // en ventanas angostas el índice tapa el texto: oculto al inicio
   const [angosto, setAngosto] = useState(() => matchMedia('(max-width: 1100px)').matches);
   useEffect(() => { const m = matchMedia('(max-width: 1100px)'); const f = () => setAngosto(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
-  const indice = angosto ? indiceAngosto : indiceAncho;
-  const setIndice = (f: (x: boolean) => boolean) => angosto ? setIndiceAngosto(f) : setIndiceAncho(f);
+  // En ventanas angostas el panel tapa el texto: empieza cerrado
+  const [panelAngosto, setPanelAngosto] = useState<Panel>(null);
+  const panel = angosto ? panelAngosto : estado.panel;
+  const ponerPanel = (p: Panel) => angosto ? setPanelAngosto(p) : abrirPanel(p);
+  const alternar = (p: Exclude<Panel, null>) => ponerPanel(panel === p ? null : p);
+  useEffect(() => { if (angosto && estado.panel === 'visor' && estado.visor) setPanelAngosto('visor'); }, [estado.visor?.vez]);
+  const [anchos, setAnchos] = useState(leerAnchos);
   const [cajon, setCajon] = useState(false);
-  const [dialogo, setDialogo] = useState(false);
-  const [menu, setMenu] = useState<'' | 'modelo' | 'esfuerzo' | 'mas'>('');
   const [entradas, setEntradas] = useState<{ lista: Entrada[]; activo: string }>({ lista: [], activo: '' });
   const [irA, setIrA] = useState({ id: '', vez: 0 });
 
@@ -138,19 +129,34 @@ function App() {
   const claveDoc = v?.tipo === 'agente' ? v.id : v?.tipo === 'sesion' ? v.sessionId : '';
   const doc = claveDoc ? estado.documentos.get(claveDoc) : undefined;
   const cwd = agente?.cwd || (v?.tipo === 'sesion' ? v.cwd : '');
-  const titulo = agente?.titulo || sesion?.titulo || 'Conversación';
+  const titulo = v ? agente?.titulo || sesion?.titulo || 'Conversación' : 'Agente nuevo';
 
-  useEffect(() => { try { localStorage.setItem('lyra-indice', indiceAncho ? '1' : '0'); } catch {} }, [indiceAncho]);
   useEffect(() => { document.title = v ? `${titulo} · Lyra` : 'Lyra'; }, [titulo, !!v]);
-  useEffect(() => { setMenu(''); if (estado.editando === 'cabecera') estado.editando = null; }, [claveDoc]);
+  useEffect(() => { if (estado.editando === 'cabecera') estado.editando = null; estado.visor = null; }, [claveDoc]);
+
+  // Archivos de la conversación: punto en el visor si hay nuevos; una imagen recién generada abre el visor
+  const archivos = useMemo(() => doc ? archivosDe(doc.bloques, cwd) : [], [doc?.bloques, cwd]);
+  const conocidos = vistos.get(claveDoc);
+  if (claveDoc && doc && !conocidos) vistos.set(claveDoc, new Set(archivos.map(a => a.id + a.ruta)));
+  const nuevos = conocidos ? archivos.filter(a => !conocidos.has(a.id + a.ruta)) : [];
+  useEffect(() => {
+    if (!nuevos.length) return;
+    const imagen = nuevos.find(a => a.como === 'generó');
+    if (imagen && agente) ver(imagen.ruta, cwd);
+    if (panel === 'visor' || imagen) for (const a of nuevos) conocidos!.add(a.id + a.ruta);
+  }, [nuevos.map(a => a.id).join()]);
+  useEffect(() => { if (panel === 'visor' && conocidos) { for (const a of archivos) conocidos.add(a.id + a.ruta); refrescar(); } }, [panel, claveDoc]);
+  const hayNuevos = panel !== 'visor' && nuevos.length > 0;
 
   // Atajos de teclado
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
       if (document.querySelector('dialog[open]')) return;
-      if ((e.ctrlKey && e.key.toLowerCase() === 'n') || (e.altKey && e.key.toLowerCase() === 'n')) { e.preventDefault(); setDialogo(true); return; }
-      if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); window.dispatchEvent(new Event('lyra-enfocar')); return; }
-      if (e.ctrlKey && e.key.toLowerCase() === 'i') { e.preventDefault(); setIndice(x => !x); return; }
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey || e.altKey) && k === 'n') { e.preventDefault(); elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); return; }
+      if (e.ctrlKey && k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('lyra-enfocar')); return; }
+      if (e.ctrlKey && k === 'i') { e.preventDefault(); alternar('indice'); return; }
+      if (e.ctrlKey && k === 'o') { e.preventDefault(); alternar('visor'); return; }
       if (e.key === 'F2' && estado.vista) { e.preventDefault(); estado.editando = 'cabecera'; avisar(); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -163,114 +169,110 @@ function App() {
     };
     window.addEventListener('keydown', tecla);
     return () => window.removeEventListener('keydown', tecla);
-  }, [angosto]);
+  }, [angosto, panel]);
 
   const proveedor = agente?.proveedor || (v?.tipo === 'sesion' ? v.proveedor || sesion?.proveedor : undefined) || 'claude';
   const quien = nombreProveedor(proveedor);
-  const datos = info(proveedor);
-  const modoActual = agente?.modo || 'default';
-  // El chip recorre los modos del proveedor; «Sin preguntar» solo se elige al crear el agente
-  const ciclo = (datos?.modos.map(m => m.valor) || ['default']).filter(m => m !== 'bypassPermissions') as PermissionMode[];
-  const siguienteModo = ciclo[(ciclo.indexOf(modoActual) + 1) % ciclo.length] || 'default';
-  const { nombre: nombreDelModelo, modelo: modeloActual } = modeloDe(proveedor, agente?.modelo);
-  const esfuerzos = modeloActual?.esfuerzos || [];
   const exportar = () => doc ? aMarkdown(doc.bloques, titulo, quien, cwd) : '';
-  const opcionesMas: Opcion[] = [
-    { texto: 'Abrir en Antigravity', al: () => enviar({ t: 'abrir', con: 'antigravity', cwd }) },
-    { texto: 'Abrir una terminal aquí', al: () => enviar({ t: 'abrir', con: 'terminal', cwd }) },
-    { texto: 'Abrir la carpeta', al: () => enviar({ t: 'abrir', con: 'carpeta', cwd }) },
-    { texto: 'Guardar como Markdown', al: () => guardarArchivo(nombreArchivo(titulo), exportar()) },
-    { texto: 'Copiar como Markdown', al: () => void navigator.clipboard.writeText(exportar()) },
-  ];
   const objetivo: Objetivo | undefined = agente ? { proveedor, titulo, agente: agente.id, sessionId: agente.sessionId, cwd, trabajando: agente.estado === 'trabajando' }
     : v?.tipo === 'sesion' ? { proveedor, titulo, sessionId: v.sessionId, cwd } : undefined;
-  if (objetivo) opcionesMas.push(
-    { texto: 'Renombrar… (F2)', al: () => { estado.editando = 'cabecera'; avisar(); } },
-    { texto: 'Borrar conversación', al: () => pedirBorrar(objetivo) },
+  const recientes = estado.historial.slice(0, 6);
+  const ancho = panel ? anchos[panel] : 0;
+
+  function arrastrarBorde(e: PointerEvent) {
+    if (!panel || angosto) return;
+    e.preventDefault();
+    const inicio = e.clientX, base = anchos[panel], p = panel;
+    let ultimo = base;
+    const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + inicio - ev.clientX, 200), window.innerWidth * 0.6)); setAnchos(a => ({ ...a, [p]: ultimo })); };
+    const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); setAnchos(a => { guardarLocal('lyra-anchos', a); return a; }); document.body.classList.remove('arrastrando'); };
+    document.body.classList.add('arrastrando');
+    window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
+  }
+
+  const botonesPanel = (
+    <div class="iconos-grupo">
+      <BotonIcono icono="indice" titulo="Índice (Ctrl+I)" activo={panel === 'indice'} onClick={() => alternar('indice')} />
+      <BotonIcono icono="visor" titulo={hayNuevos ? 'Visor: hay archivos nuevos (Ctrl+O)' : 'Visor de archivos e imágenes (Ctrl+O)'} activo={panel === 'visor'} data-nuevo={hayNuevos ? 'true' : undefined} onClick={() => alternar('visor')} />
+    </div>
   );
-  const recientes = estado.historial.slice(0, 5);
 
   return (
-    <div id="app" class="lyra" data-indice={indice && v ? 'visible' : 'oculto'}>
-      <Barra abierta={cajon} onNuevo={() => { setDialogo(true); setCajon(false); }} onCerrarCajon={() => setCajon(false)} />
+    <div id="app" class="lyra" data-panel={v && panel ? panel : 'oculto'} style={{ '--panel': `${ancho}px` } as Record<string, string>}>
+      <Barra abierta={cajon} onNuevo={() => { elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); }} onCerrarCajon={() => setCajon(false)} />
       <main class="lectura">
         {estado.rechazado ? (
           <div class="vacio">
             <h2>El servidor no aceptó esta ventana</h2>
             <p>Cierra esta ventana y ábrela otra vez con el comando <code>lyra-agentes</code> o desde el menú de aplicaciones.</p>
           </div>
-        ) : v ? (
-          <>
-            <header class="lectura-cabecera">
-              <button class="boton-menu" title="Agentes" onClick={() => setCajon(x => !x)}>☰</button>
-              <div class="lectura-titulos">
-                <h1 class="lectura-titulo" title={`${titulo}\nDoble clic o F2 para renombrar`}>
-                  {objetivo ? <TituloEditable clave="cabecera" titulo={titulo} clase="lectura-titulo-texto" onGuardar={t => renombrar(objetivo, t)} /> : titulo}
-                </h1>
-                <span class="lectura-ruta">{rutaCorta(cwd)}{sesion && !agente ? ` · ${haceCuanto(sesion.modificado)}` : ''}</span>
-              </div>
-              <div class="chips">
-                <span class="chip" data-chip="proveedor" data-proveedor={proveedor}><span class="proveedor-punto" />{quien}</span>
-                {agente ? (
-                  <>
-                    <span class="menu-ancla">
-                      <button class="chip" data-chip="modelo" title="Cambiar modelo" onClick={() => setMenu(x => x === 'modelo' ? '' : 'modelo')}>{nombreDelModelo}</button>
-                      {menu === 'modelo' && <Menu ancla="modelo" onCerrar={() => setMenu('')} opciones={(datos?.modelos || []).map(m => ({ texto: m.nombre, nota: m.descripcion, actual: m === modeloActual, al: () => enviar({ t: 'modelo', agente: agente.id, modelo: m.valor }) }))} />}
-                    </span>
-                    {esfuerzos.length > 0 && (
-                      <span class="menu-ancla">
-                        <button class="chip" data-chip="esfuerzo" title="Cuánto razona antes de responder" onClick={() => setMenu(x => x === 'esfuerzo' ? '' : 'esfuerzo')}>{nombreEsfuerzo(agente.esfuerzo)}</button>
-                        {menu === 'esfuerzo' && <Menu ancla="esfuerzo" onCerrar={() => setMenu('')} opciones={[{ texto: 'Normal', actual: !agente.esfuerzo, al: () => enviar({ t: 'esfuerzo', agente: agente.id, esfuerzo: null }) }, ...esfuerzos.map(e => ({ texto: nombreEsfuerzo(e), actual: e === agente.esfuerzo, al: () => enviar({ t: 'esfuerzo', agente: agente.id, esfuerzo: e }) }))]} />}
-                      </span>
-                    )}
-                    <button class="chip" data-chip="modo" data-modo={modoActual} title={`Permisos: ${nombreModo(modoActual, proveedor)}. Clic para pasar a «${nombreModo(siguienteModo, proveedor)}»`}
-                      onClick={() => enviar({ t: 'modo', agente: agente.id, modo: siguienteModo })}>{nombreModo(modoActual, proveedor)}</button>
-                    {agente.contexto && <span class="chip" data-chip="contexto" title="Contexto usado">{miles(agente.contexto.usados)} / {miles(agente.contexto.total)}</span>}
-                  </>
-                ) : <span class="chip">Solo lectura</span>}
-                <button class="chip" data-chip="indice" title="Mostrar u ocultar el índice (Ctrl+I)" onClick={() => setIndice(x => !x)}>Índice</button>
-                <span class="menu-ancla">
-                  <button class="chip" data-chip="mas" title="Abrir en otra app o guardar la conversación" aria-label="Más acciones" onClick={() => setMenu(x => x === 'mas' ? '' : 'mas')}>⋯</button>
-                  {menu === 'mas' && <Menu ancla="mas" onCerrar={() => setMenu('')} opciones={opcionesMas} />}
-                </span>
-              </div>
-            </header>
-            {!estado.conectado && <div class="desconectado">Sin conexión con el servidor… reintentando</div>}
-            {doc ? (
-              <Lector claveVista={claveDoc} bloques={doc.bloques} cwd={cwd} quien={quien} irA={irA}
-                onEntradas={(lista, activo) => setEntradas(prev => prev.lista === lista && prev.activo === activo ? prev : { lista, activo })} />
-            ) : <div class="vacio"><p>Cargando la conversación…</p></div>}
-            <Redactor vista={v} agente={agente} />
-          </>
         ) : (
           <>
-            <header class="lectura-cabecera solo-menu"><button class="boton-menu" title="Agentes" onClick={() => setCajon(x => !x)}>☰</button></header>
-            {!estado.conectado && <div class="desconectado">Sin conexión con el servidor… reintentando</div>}
-            <div class="vacio">
-              <h2>¿En qué trabajamos?</h2>
-              <p>Crea un agente o retoma una conversación anterior.</p>
-              <button class="boton boton-primario" onClick={() => setDialogo(true)}>Nuevo agente</button>
-              {recientes.length > 0 && (
-                <ul>
-                  {recientes.map(s => (
-                    <li key={s.sessionId} onClick={() => elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor })}>
-                      <strong>{s.titulo}</strong><br /><small>{nombreProveedor(s.proveedor)} · {rutaCorta(s.cwd)} · {haceCuanto(s.modificado)}</small>
-                    </li>
-                  ))}
-                </ul>
+            <header class="lectura-cabecera">
+              <button class="boton-menu" title="Conversaciones" onClick={() => setCajon(x => !x)}>☰</button>
+              <div class="lectura-titulos">
+                <h1 class="lectura-titulo" title={objetivo ? `${titulo}\nDoble clic o F2 para renombrar` : undefined}>
+                  {objetivo ? <TituloEditable clave="cabecera" titulo={titulo} clase="lectura-titulo-texto" onGuardar={t => renombrar(objetivo, t)} /> : titulo}
+                </h1>
+                <span class="lectura-ruta">{v ? rutaCorta(cwd) : rutaCorta(estado.borrador.cwd) || '~/'}{sesion && !agente ? ` · ${haceCuanto(sesion.modificado)}` : ''}</span>
+              </div>
+              {v && (
+                <div class="iconos-grupo">
+                  <BotonIcono icono="codigo" titulo="Abrir la carpeta en Antigravity" onClick={() => enviar({ t: 'abrir', con: 'antigravity', cwd })} />
+                  <BotonIcono icono="terminal" titulo="Abrir una terminal aquí" onClick={() => enviar({ t: 'abrir', con: 'terminal', cwd })} />
+                  <BotonIcono icono="carpeta" titulo="Abrir la carpeta" onClick={() => enviar({ t: 'abrir', con: 'carpeta', cwd })} />
+                  <BotonIcono icono="descargar" titulo="Guardar como Markdown (en Descargas)" onClick={() => guardarArchivo(nombreArchivo(titulo), exportar())} />
+                  <BotonIcono icono="copiar" titulo="Copiar como Markdown" onClick={() => void navigator.clipboard.writeText(exportar()).then(() => mostrarError('Conversación copiada como Markdown', 'info'))} />
+                </div>
               )}
-            </div>
+              {v && botonesPanel}
+            </header>
+            {!estado.conectado && <div class="desconectado">Sin conexión con el servidor… reintentando</div>}
+            {v ? (doc ? (
+              <Lector claveVista={claveDoc} bloques={doc.bloques} cwd={cwd} quien={quien} irA={irA}
+                onEntradas={(lista, activo) => setEntradas(prev => prev.lista === lista && prev.activo === activo ? prev : { lista, activo })} />
+            ) : <div class="vacio"><p>Cargando la conversación…</p></div>) : (
+              <div class="documento nuevo">
+                <div class="documento-ancho">
+                  <p class="nuevo-pista">Escribe abajo y el agente empieza. Los chips de la caja eligen con quién, el modelo, el esfuerzo, los permisos y la carpeta; se recuerdan para la próxima vez.</p>
+                  {recientes.length > 0 && (
+                    <section class="nuevo-recientes">
+                      <h3 class="grupo-titulo">O retoma una</h3>
+                      <ul>
+                        {recientes.map(s => (
+                          <li key={s.sessionId} data-proveedor={s.proveedor} onClick={() => elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor })}>
+                            <span class="proveedor-punto" /><strong>{s.titulo}</strong><small>{nombreCarpeta(s.cwd)} · {haceCuanto(s.modificado)}</small>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                </div>
+              </div>
+            )}
+            <Redactor vista={v} agente={agente} />
           </>
         )}
         {estado.errores.length > 0 && (
           <div class="errores" role="alert">{estado.errores.map(e => <p key={e.id} data-nivel={e.nivel}>{e.texto}</p>)}</div>
         )}
       </main>
-      {v && <Indice entradas={entradas.lista} activo={entradas.activo} onIr={id => { setIrA(x => ({ id, vez: x.vez + 1 })); if (angosto) setIndiceAngosto(false); }} />}
-      <Confirmar />
-      <DialogoNuevo abierto={dialogo} carpetaInicial={rutaCorta(agente?.cwd || (v?.tipo === 'sesion' ? v.cwd : '') || estado.agentes[0]?.cwd || estado.historial[0]?.cwd || '~/')} onCerrar={() => setDialogo(false)} />
+      {v && panel && (
+        <aside class="panel" data-modo={panel}>
+          <div class="panel-borde" onPointerDown={arrastrarBorde} title="Arrastra para cambiar el ancho" />
+          <header class="panel-cabecera">
+            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : 'Visor'}</span>
+            <BotonIcono icono="cerrar" titulo="Cerrar el panel" onClick={() => ponerPanel(null)} />
+          </header>
+          <div class="panel-cuerpo">
+            {panel === 'indice'
+              ? <Indice entradas={entradas.lista} activo={entradas.activo} onIr={id => { setIrA(x => ({ id, vez: x.vez + 1 })); if (angosto) setPanelAngosto(null); }} />
+              : <Visor bloques={doc?.bloques || []} cwd={cwd} />}
+          </div>
+        </aside>
+      )}
       {cajon && <div class="cortina" onClick={() => setCajon(false)} />}
-      {angosto && indiceAngosto && v && <div class="cortina cortina-indice" onClick={() => setIndiceAngosto(false)} />}
+      {angosto && panelAngosto && v && <div class="cortina cortina-indice" onClick={() => setPanelAngosto(null)} />}
     </div>
   );
 }
