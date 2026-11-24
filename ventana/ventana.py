@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ventana propia de Lyra · Agentes: GTK4 + WebKitGTK, el mismo motor que usa Lyra en el escritorio.
+"""Ventana propia de Lyra · Agentes: GTK4 + WebKitGTK (mucho más liviana que un navegador).
 
 No es un navegador: no hay pestañas, barra ni extensiones; solo muestra la página del servidor local
 (127.0.0.1). Los enlaces de afuera se abren en el navegador predeterminado.
@@ -19,7 +19,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("WebKit", "6.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, WebKit  # noqa: E402
 
-FONDO = "#1c1d1b"   # el de kitty
+FONDO = "#1c1d1b"   # el mismo fondo que la página, para que no destelle al abrir
 DATOS = os.path.join(GLib.get_user_data_dir(), "lyra-agentes", "web")
 CACHE = os.path.join(GLib.get_user_cache_dir(), "lyra-agentes")
 DESCARGAS = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or os.path.expanduser("~")

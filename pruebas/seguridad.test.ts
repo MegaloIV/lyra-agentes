@@ -39,3 +39,12 @@ test('el servidor HTTP no sale de dist/', async () => {
   assert.equal(await archivoPublico(dist, '/assets'), null, 'no lista carpetas');
   assert.equal(await archivoPublico(dist, '/no-existe'), null);
 });
+
+test('la terminal se abre con el shell de inicio y sin las variables de otra terminal', async () => {
+  const { entornoLimpio } = await import('../servidor/abrir.ts');
+  const { userInfo } = await import('node:os');
+  const env = entornoLimpio({ PATH: '/usr/bin', HOME: '/home/x', SHELL: '/usr/bin/zsh', KITTY_WINDOW_ID: '1', TERM: 'xterm-kitty', STARSHIP_SHELL: 'zsh', CLAUDE_CODE_SESSION_ID: 'a' });
+  assert.equal(env.SHELL, userInfo().shell || '/usr/bin/zsh');
+  assert.equal(env.PATH, '/usr/bin');
+  for (const k of ['KITTY_WINDOW_ID', 'TERM', 'STARSHIP_SHELL', 'CLAUDE_CODE_SESSION_ID']) assert.equal(env[k], undefined);
+});

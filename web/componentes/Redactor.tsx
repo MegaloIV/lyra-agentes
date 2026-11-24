@@ -60,7 +60,7 @@ function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boole
       {nuevo ? (
         <Chip id="proveedor" abierto={abierto} setAbierto={setAbierto} titulo="Con quién trabajar" datos={{ 'data-proveedor': proveedor }} texto={<><span class="proveedor-punto" />{nombreProveedor(proveedor)}</>}>
           {PROVEEDORES.map(p => {
-            const i = info(p.id), nota = i && !i.instalado ? 'no instalado' : p.id === 'codex' && i?.cuota?.agotada ? 'sin cuota' : p.id === 'gemini' && i?.instalado && !i.sesion ? 'sin sesión' : '';
+            const i = info(p.id), nota = i && !i.instalado ? 'no instalado' : p.id === 'codex' && i?.cuota?.agotada ? 'sin cuota' : p.id === 'gemini' && i?.instalado && !i.sesion ? 'sin sesión' : p.id === 'local' && i?.instalado && !i.sesion ? 'sin modelos' : '';
             return (
               <Opcion key={p.id} actual={p.id === proveedor} al={() => { if (i && !i.instalado) return; cambiarBorrador({ proveedor: p.id, modelo: '', esfuerzo: '', modo: info(p.id)?.modos.some(m => m.valor === b.modo) ? b.modo : 'default' }); cerrar(); }}>
                 <span class="proveedor-punto" data-proveedor={p.id} />{p.nombre}{nota && <small>{nota}</small>}
@@ -199,6 +199,12 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
 
   return (
     <footer class="redactor">
+      {nuevo && datosNuevo?.id === 'local' && datosNuevo.instalado && !datosNuevo.sesion && (
+        <div class="redactor-aviso">Ollama no tiene modelos que sepan usar herramientas con al menos 16k de contexto.</div>
+      )}
+      {nuevo && datosNuevo?.id === 'local' && datosNuevo.sesion && (
+        <div class="redactor-aviso redactor-aviso-suave">Corre en tu computadora: nada sale de ella, pero es más lento que los otros.</div>
+      )}
       {nuevo && datosNuevo?.id === 'gemini' && datosNuevo.instalado && !datosNuevo.sesion && (
         <div class="redactor-aviso">Gemini todavía no tiene tu cuenta de Google. <button type="button" class="enlace" onClick={() => enviar({ t: 'abrir', con: 'loginGemini' })}>Iniciar sesión</button></div>
       )}

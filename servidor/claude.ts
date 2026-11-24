@@ -9,6 +9,7 @@ import { crearNormalizador } from './normalizar.ts';
 import { Cola } from './cola.ts';
 import { cadena } from './resumenes.ts';
 import type { Agente, Contexto, Motor } from './motor.ts';
+import { anotarLocal, entornoLocal, HERRAMIENTAS_LOCALES, asegurarOllama, modelosLocales } from './local.ts';
 
 const EJECUTABLE = '/usr/bin/claude';
 
@@ -43,19 +44,38 @@ export class MotorClaude implements Motor {
   normalizador: ReturnType<typeof crearNormalizador>;
   private ctx: Contexto;
   private a: Agente;
-  constructor(ctx: Contexto, a: Agente, normalizador?: ReturnType<typeof crearNormalizador>) {
-    this.ctx = ctx; this.a = a; this.normalizador = normalizador || crearNormalizador(a.cwd); }
+  /** `local`: el mismo Claude Code, pero con un modelo de Ollama (servidor/local.ts) */
+  private local: boolean;
+  constructor(ctx: Contexto, a: Agente, normalizador?: ReturnType<typeof crearNormalizador>, local = false) {
+    this.ctx = ctx; this.a = a; this.local = local; this.normalizador = normalizador || crearNormalizador(a.cwd); }
 
   iniciar() {
     const a = this.a;
     this.consulta?.close(); this.abortar.abort(); this.cola.cerrar();
     this.abortar = new AbortController(); this.cola = new Cola(); a.cerrado = false;
     this.ctx.estado(a, 'iniciando');
+    if (this.local) { void this.iniciarLocal(); return; }
+    this.arrancar({ model: a.modelo, effort: a.esfuerzo as EffortLevel | undefined, settingSources: ['user', 'project', 'local'], env: { ...process.env } });
+  }
+
+  /** Ollama tiene que estar corriendo y el modelo elegido (o el primero que sirva) */
+  private async iniciarLocal() {
+    const a = this.a;
+    try {
+      if (!await asegurarOllama()) throw new Error('No se pudo conectar con Ollama. Revisa que esté instalado o corriendo.');
+      if (!a.modelo) { a.modelo = (await modelosLocales())[0]?.valor || undefined; this.ctx.barra(); }
+      if (!a.modelo) throw new Error('Ollama no tiene ningún modelo que sepa usar herramientas.');
+      // Sin las instrucciones del usuario (~/.claude) ni sus plugins: solo las del proyecto, para ahorrar contexto
+      this.arrancar({ model: a.modelo, settingSources: ['project', 'local'], env: entornoLocal(a.modelo), tools: HERRAMIENTAS_LOCALES });
+    } catch (e) { this.ctx.fallo(a, e); }
+  }
+
+  private arrancar(extra: Pick<Parameters<typeof query>[0]['options'] & {}, 'model' | 'effort' | 'settingSources' | 'env' | 'tools'>) {
+    const a = this.a;
     try {
       this.consulta = query({ prompt: this.cola, options: {
-        cwd: a.cwd, resume: a.sessionId, model: a.modelo, permissionMode: a.modo, effort: a.esfuerzo as EffortLevel | undefined,
-        settingSources: ['user', 'project', 'local'], systemPrompt: { type: 'preset', preset: 'claude_code' },
-        includePartialMessages: true, pathToClaudeCodeExecutable: EJECUTABLE, env: { ...process.env },
+        cwd: a.cwd, resume: a.sessionId, permissionMode: a.modo, systemPrompt: { type: 'preset', preset: 'claude_code' },
+        includePartialMessages: true, pathToClaudeCodeExecutable: EJECUTABLE, ...extra,
         canUseTool: this.permisos(), abortController: this.abortar, allowDangerouslySkipPermissions: a.modo === 'bypassPermissions'
       } });
       void this.consumir(this.consulta);
@@ -68,7 +88,7 @@ export class MotorClaude implements Motor {
       for await (const msg of consulta) {
         if (a.cerrado || this.consulta !== consulta) break;
         if (msg.type === 'system' && msg.subtype === 'status' && msg.permissionMode && msg.permissionMode !== a.modo) { a.modo = msg.permissionMode; ctx.barra(); }
-        if (msg.type === 'system' && msg.subtype === 'init') { a.sessionId = msg.session_id; a.modelo = msg.model; a.modo = msg.permissionMode; ctx.barra(); if (a.estado === 'iniciando') ctx.estado(a, 'listo'); }
+        if (msg.type === 'system' && msg.subtype === 'init') { if (this.local && msg.session_id !== a.sessionId) void anotarLocal(msg.session_id, msg.model); a.sessionId = msg.session_id; a.modelo = msg.model; a.modo = msg.permissionMode; ctx.barra(); if (a.estado === 'iniciando') ctx.estado(a, 'listo'); }
         if (msg.type === 'assistant' || msg.type === 'stream_event') {
           const ids = msg.user_message_uuids || (msg.user_message_uuid ? [msg.user_message_uuid] : []);
           ctx.ops(a, ids.map(id => ({ op: 'actualizar', id, cambios: { enCola: false } })));
@@ -82,7 +102,7 @@ export class MotorClaude implements Motor {
           if (typeof consulta.getContextUsage === 'function') void consulta.getContextUsage({ detail: 'summary' }).then(c => { if (!a.cerrado && this.consulta === consulta) { a.contexto = { usados: c.totalTokens, total: c.rawMaxTokens }; ctx.barra(); } }).catch(() => {});
         }
       }
-      if (!a.cerrado && this.consulta === consulta) ctx.fallo(a, new Error('El proceso de Claude terminó. Puedes reanudar la sesión.'));
+      if (!a.cerrado && this.consulta === consulta) ctx.fallo(a, new Error(`El proceso de ${this.local ? 'el agente local' : 'Claude'} terminó. Puedes reanudar la sesión.`));
     } catch (e) { if (!a.cerrado && this.consulta === consulta) ctx.fallo(a, e); }
   }
 
@@ -114,8 +134,12 @@ export class MotorClaude implements Motor {
 
   async interrumpir() { await this.consulta?.interrupt(); }
   async modo(m: PermissionMode) { await this.consulta?.setPermissionMode(m); this.a.modo = m; }
-  async modelo(m?: string) { await this.consulta?.setModel(m); this.a.modelo = m; }
-  async esfuerzo(e?: string) { await this.consulta?.applyFlagSettings({ effortLevel: (e ?? null) as EffortLevel | null }); this.a.esfuerzo = e; }
+  async modelo(m?: string) {
+    // En local, el modelo va en el entorno (también el de fondo): se cambia arrancando de nuevo sobre la misma sesión
+    if (this.local) { if (m && m !== this.a.modelo) { this.a.modelo = m; if (this.a.estado !== 'trabajando') this.iniciar(); } return; }
+    await this.consulta?.setModel(m); this.a.modelo = m;
+  }
+  async esfuerzo(e?: string) { if (this.local) return; await this.consulta?.applyFlagSettings({ effortLevel: (e ?? null) as EffortLevel | null }); this.a.esfuerzo = e; }
   async comandos(): Promise<Comando[]> { return (await this.consulta?.supportedCommands() || []).map(c => ({ nombre: c.name, descripcion: c.description })); }
   cerrar() { this.cola.cerrar(); this.abortar.abort(); this.consulta?.close(); }
 }

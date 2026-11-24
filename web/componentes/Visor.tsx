@@ -1,16 +1,22 @@
 // Visor del panel derecho: los archivos que el agente creó, editó, generó o nombró, y la vista de uno.
-// Muestra Markdown, imágenes, PDF, HTML (sin scripts) y código; lo demás se abre con su app.
+// Muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas (pasadas a PDF con LibreOffice),
+// HTML (sin scripts) y código. «Abrir con…» elige otra app (OnlyOffice, VS Code…).
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Bloque } from '@protocolo';
-import { enviar, estado, leerArchivo, ver, avisar } from '../tienda.ts';
+import { enviar, estado, leerArchivo, urlMedio, ver, avisar } from '../tienda.ts';
+import { Docx, Pdf } from './Paginas.tsx';
 import { renderizar } from '../md.ts';
 import { Codigo } from './Documento.tsx';
-import { BotonIcono } from './Acciones.tsx';
+import { BotonIcono, Desplegable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { lenguajeDe, nombreCarpeta, rutaCorta } from '../util.ts';
 
 export const IMAGEN = /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/i;
-const DOCUMENTO = /\.(md|markdown|pdf|html?|txt|csv|tsv|docx?|odt|xlsx?|pptx?)$/i;
+export const MEDIO = /\.(mp4|m4v|webm|mkv|mov|ogv|mp3|ogg|oga|opus|wav|m4a|flac)$/i;
+const AUDIO = /\.(mp3|ogg|oga|opus|wav|m4a|flac)$/i;
+const DOCUMENTO = /\.(md|markdown|pdf|html?|txt|csv|tsv|docx?|odt|odp|ods|rtf|xlsx?|pptx?)$/i;
+/** Se pasan a PDF en el servidor (los .docx se dibujan aquí mismo) */
+const OFICINA = /\.(pptx?|xlsx?|doc|odt|odp|ods|rtf)$/i;
 
 export type ArchivoVisto = { ruta: string; como: 'creó' | 'editó' | 'generó' | 'miró' | 'nombró'; id: string };
 
@@ -26,13 +32,13 @@ export function archivosDe(bloques: Bloque[], cwd = ''): ArchivoVisto[] {
       if (b.icono === 'imagen' && b.nombre === 'GenerarImagen') lista.push({ ruta, como: 'generó', id: b.id });
       else if (b.icono === 'crear') lista.push({ ruta, como: 'creó', id: b.id });
       else if (b.icono === 'editar') lista.push({ ruta, como: 'editó', id: b.id });
-      else if (IMAGEN.test(ruta)) lista.push({ ruta, como: 'miró', id: b.id });
+      else if (IMAGEN.test(ruta) || MEDIO.test(ruta)) lista.push({ ruta, como: 'miró', id: b.id });
     }
     if (b.tipo === 'texto' && !b.enCurso && !('padre' in b && b.padre)) {
       // Enlaces a archivos locales y rutas entre `comillas` que sean documentos o imágenes
       for (const m of b.md.matchAll(/\]\(([^)\s]+)\)|`([^`\s]+)`/g)) {
         const r = (m[1] || m[2] || '').replace(/^file:\/\//, '').replace(/:\d+(?::\d+)?$/, '');
-        if (!/^[a-z]+:/i.test(r) && (IMAGEN.test(r) || DOCUMENTO.test(r))) lista.push({ ruta: r, como: 'nombró', id: b.id });
+        if (!/^[a-z]+:/i.test(r) && (IMAGEN.test(r) || DOCUMENTO.test(r) || MEDIO.test(r))) lista.push({ ruta: r, como: 'nombró', id: b.id });
       }
     }
   }
@@ -45,21 +51,46 @@ export function archivosDe(bloques: Bloque[], cwd = ''): ArchivoVisto[] {
 
 const relativa = (ruta: string, cwd: string) => cwd && ruta.startsWith(cwd + '/') ? ruta.slice(cwd.length + 1) : rutaCorta(ruta);
 const carpetaDe = (ruta: string, cwd: string) => { const d = relativa(ruta, cwd).replace(/\/?[^/]+$/, ''); return d ? nombreCarpeta(d) : nombreCarpeta(cwd); };
-const iconoDe = (ruta: string) => IMAGEN.test(ruta) ? 'imagen' : /\.(md|markdown|txt|pdf|html?|docx?|odt)$/i.test(ruta) ? 'leer' : 'codigo';
+const iconoDe = (ruta: string) => IMAGEN.test(ruta) ? 'imagen' : MEDIO.test(ruta) ? 'video' : /\.(md|markdown|txt|pdf|html?|docx?|odt)$/i.test(ruta) ? 'leer' : 'codigo';
 
-type Cargado = { estado: 'cargando' } | { estado: 'error'; texto: string } | { estado: 'listo'; tipo: string; url?: string; texto?: string; ruta: string };
+type Cargado = { estado: 'cargando' } | { estado: 'error'; texto: string } | { estado: 'listo'; tipo: string; url?: string; texto?: string; datos?: Blob; ruta: string };
+
+/** «Abrir con…»: la lista de apps que el escritorio tiene para ese archivo */
+function AbrirCon({ ruta, cwd }: { ruta: string; cwd: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const apps = estado.apps?.ruta === ruta ? estado.apps.apps : null;
+  return (
+    <span class="ancla">
+      <BotonIcono icono="abrir" titulo="Abrir con…" activo={abierto} onClick={() => { if (!abierto) enviar({ t: 'aplicaciones', ruta, cwd }); setAbierto(x => !x); }} />
+      {abierto && (
+        <Desplegable onCerrar={() => setAbierto(false)} clase="desplegable-derecha">
+          {!apps && <p class="desplegable-nota">Buscando apps…</p>}
+          {apps && !apps.length && <p class="desplegable-nota">Ninguna app dice abrir este tipo de archivo.</p>}
+          {apps?.map(a => (
+            <button type="button" key={a.id} onClick={() => { enviar({ t: 'abrirArchivo', ruta, cwd, app: a.id }); setAbierto(false); }}>
+              <Icono nombre="apps" tam={14} />{a.nombre}{a.predeterminada && <small>predeterminada</small>}
+            </button>
+          ))}
+        </Desplegable>
+      )}
+    </span>
+  );
+}
 
 function Vista({ ruta, cwd, firma }: { ruta: string; cwd: string; firma: number }) {
   const [c, setC] = useState<Cargado>({ estado: 'cargando' });
   const [fuente, setFuente] = useState(false);
   const [vez, setVez] = useState(0);
+  const esMedio = MEDIO.test(ruta), aPdf = OFICINA.test(ruta);
   useEffect(() => {
     let vivo = true, url = '';
+    if (esMedio) { setC({ estado: 'listo', tipo: AUDIO.test(ruta) ? 'audio/*' : 'video/*', url: urlMedio(ruta, cwd) + `&v=${firma}.${vez}`, ruta }); return; }
     setC(prev => prev.estado === 'listo' ? prev : { estado: 'cargando' });
-    leerArchivo(ruta, cwd).then(async r => {
+    leerArchivo(ruta, cwd, aPdf ? 'pdf' : undefined).then(async r => {
       if (!vivo) return;
       const tipo = r.tipo.split(';')[0]!;
-      if (tipo.startsWith('image/') || tipo === 'application/pdf') { url = URL.createObjectURL(r.datos); setC({ estado: 'listo', tipo, url, ruta: r.ruta }); }
+      if (tipo === 'application/pdf' || /\.docx$/i.test(ruta)) setC({ estado: 'listo', tipo, datos: r.datos, ruta: r.ruta });
+      else if (tipo.startsWith('image/')) { url = URL.createObjectURL(r.datos); setC({ estado: 'listo', tipo, url, ruta: r.ruta }); }
       else if (tipo.startsWith('text/')) setC({ estado: 'listo', tipo, texto: await r.datos.text(), ruta: r.ruta });
       else setC({ estado: 'listo', tipo, ruta: r.ruta });
     }).catch((e: Error) => vivo && setC({ estado: 'error', texto: e.message }));
@@ -71,10 +102,18 @@ function Vista({ ruta, cwd, firma }: { ruta: string; cwd: string; firma: number 
   const esMd = /\.(md|markdown)$/i.test(ruta), esHtml = /\.html?$/i.test(ruta);
   const html = useMemo(() => c.estado === 'listo' && esMd && c.texto !== undefined ? renderizar(c.texto, 'visor') : '', [c, esMd]);
   let cuerpo: preact.JSX.Element;
-  if (c.estado === 'cargando') cuerpo = <p class="visor-nota">Cargando…</p>;
-  else if (c.estado === 'error') cuerpo = <p class="visor-nota" data-nivel="error">{c.texto}</p>;
+  if (c.estado === 'cargando') cuerpo = <p class="visor-nota">{aPdf ? 'Preparando la vista (la primera vez tarda unos segundos)…' : 'Cargando…'}</p>;
+  else if (c.estado === 'error') cuerpo = (
+    <div class="visor-nota" data-nivel="error">
+      <p>{c.texto}</p>
+      <button type="button" class="boton" onClick={() => enviar({ t: 'abrirArchivo', ruta, cwd })}>Abrir con su app</button>
+    </div>
+  );
+  else if (c.tipo === 'video/*') cuerpo = <div class="visor-medio"><video src={c.url} controls preload="metadata" /></div>;
+  else if (c.tipo === 'audio/*') cuerpo = <div class="visor-medio"><audio src={c.url} controls preload="metadata" /></div>;
+  else if (c.datos && c.tipo === 'application/pdf') cuerpo = <Pdf datos={c.datos} />;
+  else if (c.datos) cuerpo = <Docx datos={c.datos} />;
   else if (c.tipo.startsWith('image/')) cuerpo = <div class="visor-imagen"><img src={c.url} alt={nombre} onClick={e => (e.currentTarget as HTMLElement).classList.toggle('real')} title="Clic: tamaño real" /></div>;
-  else if (c.tipo === 'application/pdf') cuerpo = <iframe class="visor-marco" src={c.url} title={nombre} />;
   else if (c.texto !== undefined && esHtml && !fuente) cuerpo = <iframe class="visor-marco visor-html" sandbox="" srcdoc={c.texto} title={nombre} />;
   else if (c.texto !== undefined && esMd && !fuente) cuerpo = <div class="md visor-md" dangerouslySetInnerHTML={{ __html: html }} />;
   else if (c.texto !== undefined) cuerpo = <Codigo texto={c.texto.length > 400000 ? c.texto.slice(0, 400000) + '\n… (recortado)' : c.texto} lenguaje={lenguajeDe(ruta)} />;
@@ -92,7 +131,7 @@ function Vista({ ruta, cwd, firma }: { ruta: string; cwd: string; firma: number 
         <span class="visor-nombre" title={c.estado === 'listo' ? rutaCorta(c.ruta) : ruta}>{nombre}</span>
         {(esMd || esHtml) && <BotonIcono icono="codigo" titulo={fuente ? 'Ver como documento' : 'Ver el código'} activo={fuente} onClick={() => setFuente(x => !x)} />}
         <BotonIcono icono="recargar" titulo="Volver a cargar" onClick={() => setVez(x => x + 1)} />
-        <BotonIcono icono="abrir" titulo="Abrir con su app" onClick={() => enviar({ t: 'abrirArchivo', ruta, cwd })} />
+        <AbrirCon ruta={ruta} cwd={cwd} />
       </header>
       <div class="visor-cuerpo">{cuerpo}</div>
     </div>

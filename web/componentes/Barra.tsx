@@ -1,8 +1,8 @@
-// Barra de la izquierda: agentes abiertos, carpetas propias y las conversaciones anteriores por fecha.
+// Barra de la izquierda: agentes abiertos, carpetas propias y las conversaciones anteriores por carpeta del proyecto.
 // Cada fila muestra sus acciones solo al pasar el cursor: mover a una carpeta y la papelera.
 import { useState } from 'preact/hooks';
 import type { Proveedor, ResumenAgente, Sesion } from '@protocolo';
-import { estado, elegir, enviar, avisar, borrar, renombrar, crearCarpeta, renombrarCarpeta, alternarCarpeta, borrarCarpeta, moverSesion } from '../tienda.ts';
+import { estado, elegir, enviar, avisar, borrar, cambiarBorrador, guardarLocal, renombrar, crearCarpeta, renombrarCarpeta, alternarCarpeta, borrarCarpeta, moverSesion } from '../tienda.ts';
 import type { Objetivo } from '../tienda.ts';
 import { BotonIcono, Desplegable, Papelera, TituloEditable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
@@ -14,17 +14,9 @@ const GRUPOS = [
   { clave: 'listos', titulo: 'Abiertos', estados: ['listo', 'cerrado'] },
 ] as const;
 
-const DIA = 86400000;
-function tramo(fecha: number): string {
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const t = hoy.getTime();
-  if (fecha >= t) return 'Hoy';
-  if (fecha >= t - DIA) return 'Ayer';
-  if (fecha >= t - 6 * DIA) return 'Esta semana';
-  if (fecha >= t - 30 * DIA) return 'Este mes';
-  return 'Antes';
-}
-const TRAMOS = ['Hoy', 'Ayer', 'Esta semana', 'Este mes', 'Antes'];
+// Qué carpetas de proyecto abrió o cerró el usuario; las que no tocó: abiertas las 3 más recientes
+const PLEGADO = 'lyra-proyectos';
+const ABIERTAS_DE_ENTRADA = 3;
 
 /** Arrastrar una conversación a una carpeta */
 const ARRASTRE = 'application/x-lyra-sesion';
@@ -84,7 +76,7 @@ function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; on
   );
 }
 
-function Fila({ s, onElegir }: { s: Sesion; onElegir: () => void }) {
+function Fila({ s, onElegir, enProyecto = false }: { s: Sesion; onElegir: () => void; enProyecto?: boolean }) {
   const v = estado.vista;
   const objetivo: Objetivo = { proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd };
   return (
@@ -94,7 +86,7 @@ function Fila({ s, onElegir }: { s: Sesion; onElegir: () => void }) {
       <span class="agente-estado" />
       <div class="agente-texto">
         <TituloEditable clave={`sesion:${s.sessionId}`} titulo={s.titulo} clase="agente-titulo" onGuardar={t => renombrar(objetivo, t)} />
-        <span class="agente-meta"><span class="proveedor-marca" data-proveedor={s.proveedor}>{nombreProveedor(s.proveedor)}</span> {nombreCarpeta(s.cwd)} · {haceCuanto(s.modificado)}</span>
+        <span class="agente-meta"><span class="proveedor-marca" data-proveedor={s.proveedor}>{nombreProveedor(s.proveedor)}</span> {enProyecto ? '' : `${nombreCarpeta(s.cwd)} · `}{haceCuanto(s.modificado)}</span>
       </div>
       <span class="agente-acciones">
         <Mover sessionId={s.sessionId} />
@@ -107,7 +99,7 @@ function Fila({ s, onElegir }: { s: Sesion; onElegir: () => void }) {
 export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void }) {
   const [filtro, setFiltro] = useState<Proveedor | ''>('');
   const [busqueda, setBusqueda] = useState('');
-  const [abiertos, setAbiertos] = useState<Set<string>>(() => new Set(['Hoy', 'Ayer', 'Esta semana']));
+  const [plegado, setPlegado] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem(PLEGADO) || '{}'); } catch { return {}; } });
   const [marcado, setMarcado] = useState<string | null>(null);
   const v = estado.vista;
   const q = busqueda.trim().toLowerCase();
@@ -117,14 +109,17 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
   const abiertas = new Set(estado.agentes.map(a => a.sessionId).filter(Boolean));
   const { carpetas, sesiones: enCarpeta } = estado.grupos;
   const porCarpeta = new Map<string, Sesion[]>(carpetas.map(c => [c.id, []]));
-  const porTramo = new Map<string, Sesion[]>();
+  const porProyecto = new Map<string, Sesion[]>();   // el historial ya viene del más reciente al más viejo
   for (const s of estado.historial) {
     if (abiertas.has(s.sessionId) || !pasa(s.titulo, s.cwd, s.proveedor)) continue;
     const c = enCarpeta[s.sessionId];
     if (c && porCarpeta.has(c)) porCarpeta.get(c)!.push(s);
-    else { const t = tramo(s.modificado); porTramo.set(t, [...(porTramo.get(t) || []), s]); }
+    else { const l = porProyecto.get(s.cwd); if (l) l.push(s); else porProyecto.set(s.cwd, [s]); }
   }
   const hay = new Set(estado.historial.map(s => s.proveedor));
+  const proyectos = [...porProyecto.entries()];
+  const abierto = (cwd: string, i: number) => !!q || (plegado[cwd] ?? i < ABIERTAS_DE_ENTRADA);
+  const alternar = (cwd: string, i: number) => { const n = { ...plegado, [cwd]: !abierto(cwd, i) }; setPlegado(n); guardarLocal(PLEGADO, n); };
   const elegirAgente = (id: string) => { elegir({ tipo: 'agente', id }); onCerrarCajon(); };
 
   return (
@@ -177,24 +172,28 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
         </section>
       )}
 
-      {porTramo.size > 0 && (
+      {proyectos.length > 0 && (
         <section class="grupo" data-grupo="historial" {...soltable(null, marcado, setMarcado)}>
-          {TRAMOS.filter(t => porTramo.has(t)).map(t => {
-            const lista = porTramo.get(t)!, abierto = abiertos.has(t) || !!q;
+          {proyectos.map(([cwd, lista], i) => {
+            const ab = abierto(cwd, i);
             return (
-              <div key={t} class="tramo" data-abierto={String(abierto)}>
-                <h3 class="grupo-titulo tramo-titulo">
-                  <button type="button" class="tramo-boton" aria-expanded={abierto} onClick={() => setAbiertos(prev => { const n = new Set(prev); if (n.has(t)) n.delete(t); else n.add(t); return n; })}>
-                    <span class="carpeta-flecha" />{t} <span class="grupo-cuenta">{lista.length}</span>
+              <div key={cwd} class="tramo proyecto" data-abierto={String(ab)}>
+                <h3 class="grupo-titulo tramo-titulo proyecto-titulo" title={rutaCorta(cwd)}>
+                  <button type="button" class="tramo-boton" aria-expanded={ab} onClick={() => alternar(cwd, i)}>
+                    <span class="carpeta-flecha" /><span class="proyecto-nombre">{nombreCarpeta(cwd)}</span> <span class="grupo-cuenta">{lista.length}</span>
                   </button>
+                  <span class="agente-acciones">
+                    <button type="button" class="agente-accion" title={`Agente nuevo en ${rutaCorta(cwd)}`} aria-label="Agente nuevo en esta carpeta"
+                      onClick={() => { cambiarBorrador({ cwd }); onNuevo(); }}><Icono nombre="nuevo" /></button>
+                  </span>
                 </h3>
-                {abierto && <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} />)}</ul>}
+                {ab && <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} enProyecto />)}</ul>}
               </div>
             );
           })}
         </section>
       )}
-      {(q || filtro) && !agentes.length && !porTramo.size && ![...porCarpeta.values()].some(l => l.length) && <p class="historial-vacio">Nada coincide.</p>}
+      {(q || filtro) && !agentes.length && !proyectos.length && ![...porCarpeta.values()].some(l => l.length) && <p class="historial-vacio">Nada coincide.</p>}
     </aside>
   );
 }

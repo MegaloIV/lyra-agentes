@@ -1,6 +1,6 @@
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 export type { PermissionMode };
-export type Proveedor = 'claude' | 'codex' | 'gemini';
+export type Proveedor = 'claude' | 'codex' | 'gemini' | 'local';
 /** Detalle listo para dibujar (Codex y Gemini lo mandan armado) y texto del botón «Permitir siempre» */
 export type Solicitud = { id: string; agente: string; herramienta: string; entrada: Record<string, unknown>; titulo?: string; descripcion?: string; nombreCorto?: string; motivo?: string; rutaBloqueada?: string; haySugerencias: boolean; detalle?: Detalle; etiquetaSiempre?: string };
 export type Detalle = { clase: 'codigo'; lenguaje?: string; texto: string } | { clase: 'diff'; ruta: string; lineas: { tipo: '+' | '-' | ' '; texto: string }[] } | { clase: 'md'; texto: string };
@@ -35,9 +35,11 @@ export type ClienteMensaje =
   | { t: 'modelo'; agente: string; modelo: string | null }
   | { t: 'esfuerzo'; agente: string; esfuerzo: string | null }
   | { t: 'catalogo' }
-  | { t: 'abrir'; con: 'antigravity' | 'terminal' | 'carpeta' | 'loginGemini'; cwd?: string }
+  | { t: 'abrir'; con: 'terminal' | 'carpeta' | 'loginGemini'; cwd?: string }
   /** Abre un archivo con su app (`ruta` relativa a `cwd`) */
-  | { t: 'abrirArchivo'; ruta: string; cwd?: string }
+  | { t: 'abrirArchivo'; ruta: string; cwd?: string; app?: string }
+  /** Las apps que pueden abrir ese archivo (para «Abrir con…») */
+  | { t: 'aplicaciones'; ruta: string; cwd?: string }
   | { t: 'guardarGrupos'; grupos: Grupos }
   | { t: 'abrirSesion'; sessionId: string; cwd: string; proveedor?: Proveedor }
   | { t: 'reanudar'; sessionId: string; cwd: string; proveedor?: Proveedor; texto?: string }
@@ -57,7 +59,8 @@ export type ServidorMensaje =
   | { t: 'aviso'; texto: string }
   | { t: 'borrada'; sessionId?: string; agente?: string }
   | { t: 'enfocar'; agente: string }
-  | { t: 'grupos'; grupos: Grupos };
+  | { t: 'grupos'; grupos: Grupos }
+  | { t: 'aplicaciones'; ruta: string; apps: { id: string; nombre: string; predeterminada?: boolean }[] };
 export function aplicarOps(bloques: Bloque[], ops: Op[]): Bloque[] {
   const salida = [...bloques];
   for (const op of ops) {

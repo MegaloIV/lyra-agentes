@@ -9,10 +9,11 @@ import { MotorClaude, cargarClaude, historialClaude, tituloClaude } from './clau
 import { MotorCodex, cargarCodex, historialCodex } from './codex.ts';
 import { MotorGemini, cargarGemini, historialGemini } from './gemini.ts';
 import { instalado } from './motor.ts';
+import { sesionesLocales } from './local.ts';
 import { borrarSesion, renombrarSesion } from './papelera.ts';
 
 export type { Agente };
-const NOMBRES: Record<Proveedor, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
+const NOMBRES: Record<Proveedor, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', local: 'El agente local' };
 
 export class GestorAgentes implements Contexto {
   agentes = new Map<string, Agente>();
@@ -61,8 +62,10 @@ export class GestorAgentes implements Contexto {
 
   /** Todas las conversaciones guardadas de los tres proveedores, de la más reciente */
   async historial(): Promise<Sesion[]> {
+    const locales = await sesionesLocales();
     const partes = await Promise.all([
-      historialClaude().catch(() => []),
+      // Las locales se guardan con las de Claude: se distinguen por el registro
+      historialClaude().then(l => l.map(s => s.sessionId in locales ? { ...s, proveedor: 'local' as const } : s)).catch(() => []),
       instalado('codex') ? historialCodex().catch(() => []) : [],
       historialGemini().catch(() => []),
     ]);
@@ -80,7 +83,7 @@ export class GestorAgentes implements Contexto {
     let cwd = opciones.cwd;
     cwd = resolve(cwd.startsWith('~/') ? homedir() + cwd.slice(1) : cwd);
     if (!(await stat(cwd)).isDirectory()) throw new Error('La ruta no es una carpeta.');
-    if (proveedor !== 'claude' && !instalado(proveedor)) throw new Error(`${NOMBRES[proveedor]} no está instalado.`);
+    if (proveedor !== 'claude' && proveedor !== 'local' && !instalado(proveedor)) throw new Error(`${NOMBRES[proveedor]} no está instalado.`);
     const { reanudar, prompt } = opciones;
     if (reanudar) {
       const existente = [...this.agentes.values()].find(a => a.sessionId === reanudar && a.proveedor === proveedor);
@@ -88,12 +91,13 @@ export class GestorAgentes implements Contexto {
     }
     let bloques: Bloque[] = [], titulo: string | undefined, normalizador;
     if (reanudar) {
-      if (proveedor === 'claude') { const c = await cargarClaude(reanudar, cwd); bloques = c.bloques; normalizador = c.normalizador; titulo = await tituloClaude(reanudar, cwd); }
+      if (proveedor === 'claude' || proveedor === 'local') { const c = await cargarClaude(reanudar, cwd); bloques = c.bloques; normalizador = c.normalizador; titulo = await tituloClaude(reanudar, cwd); }
       else { bloques = await this.cargar(proveedor, reanudar, cwd).catch(() => []); titulo = (await this.historial()).find(s => s.sessionId === reanudar)?.titulo; }
     }
     const a: Agente = { id: randomUUID(), proveedor, sessionId: reanudar, cwd, titulo: titulo || prompt?.slice(0, 60) || 'Nuevo agente', estado: 'iniciando', modelo: opciones.modelo, esfuerzo: opciones.esfuerzo,
       modo: opciones.modo || 'default', sinLeer: false, ultimaActividad: Date.now(), bloques, pendientes: new Map(), cerrado: false, motor: undefined! };
-    a.motor = proveedor === 'codex' ? new MotorCodex(this, a) : proveedor === 'gemini' ? new MotorGemini(this, a) : new MotorClaude(this, a, normalizador);
+    if (proveedor === 'local' && reanudar && !a.modelo) a.modelo = (await sesionesLocales())[reanudar] || undefined;
+    a.motor = proveedor === 'codex' ? new MotorCodex(this, a) : proveedor === 'gemini' ? new MotorGemini(this, a) : new MotorClaude(this, a, normalizador, proveedor === 'local');
     this.agentes.set(a.id, a); this.barra(); this.emitir({ t: 'documento', agente: a.id, bloques: a.bloques });
     a.motor.iniciar();
     if (prompt) this.enviar(a.id, prompt);
@@ -104,7 +108,7 @@ export class GestorAgentes implements Contexto {
     const a = this.obtener(id);
     if (!texto.trim()) return;
     if (a.estado === 'error') throw new Error('Reanuda el agente antes de enviar un mensaje.');
-    if (a.titulo === 'Nuevo agente' && a.proveedor === 'claude') a.titulo = texto.slice(0, 60);
+    if (a.titulo === 'Nuevo agente' && (a.proveedor === 'claude' || a.proveedor === 'local')) a.titulo = texto.slice(0, 60);
     a.motor.enviar(texto);
   }
 

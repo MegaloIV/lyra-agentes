@@ -1,6 +1,6 @@
 {
   "name": "lyra-agentes",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,9 +14,11 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.331",
     "diff": "^9.0.0",
+    "docx-preview": "^0.4.1",
     "dompurify": "^3.5.0",
     "highlight.js": "^11.12.0",
     "markdown-it": "^15.0.3",
+    "pdfjs-dist": "^6.5.438",
     "preact": "^11.2.0",
     "ws": "^8.23.0"
   },

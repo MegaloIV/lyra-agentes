@@ -52,7 +52,7 @@ export const MODOS = [
 ] as const;
 export const nombreModo = (m: string, proveedor?: Proveedor) => estado.catalogo.find(p => p.id === proveedor)?.modos.find(x => x.valor === m)?.nombre || MODOS.find(x => x.valor === m)?.nombre || m;
 
-export const PROVEEDORES: { id: Proveedor; nombre: string }[] = [{ id: 'claude', nombre: 'Claude' }, { id: 'codex', nombre: 'Codex' }, { id: 'gemini', nombre: 'Gemini' }];
+export const PROVEEDORES: { id: Proveedor; nombre: string }[] = [{ id: 'claude', nombre: 'Claude' }, { id: 'codex', nombre: 'Codex' }, { id: 'gemini', nombre: 'Gemini' }, { id: 'local', nombre: 'Local' }];
 export const nombreProveedor = (p?: Proveedor) => PROVEEDORES.find(x => x.id === p)?.nombre || 'Claude';
 export const info = (p?: Proveedor): InfoProveedor | undefined => estado.catalogo.find(x => x.id === (p || 'claude'));
 

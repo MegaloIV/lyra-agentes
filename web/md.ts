@@ -18,7 +18,7 @@ md.renderer.rules.link_open = (t, i, o, e, s) => {
   return enlace(t, i, o, e, s);
 };
 /** `web/main.tsx`, `~/notas.md:12`: rutas que se pueden abrir en el visor */
-const RUTA = /^(?:~\/|\.{1,2}\/|\/)?(?:[\w.@+-]+\/)*[\w@+-][\w.@+-]*\.(?:md|markdown|txt|pdf|html?|png|jpe?g|gif|webp|svg|csv|tsv|json|jsonl|tsx?|jsx?|mjs|py|sh|css|toml|ya?ml|lua|rs|go|c|h|cpp|java|sql|tex|ini|conf|xml|log|docx?|xlsx?|pptx?|odt)(?::\d+(?::\d+)?)?$/i;
+const RUTA = /^(?:~\/|\.{1,2}\/|\/)?(?:[\w.@+-]+\/)*[\w@+-][\w.@+-]*\.(?:md|markdown|txt|pdf|html?|png|jpe?g|gif|webp|svg|csv|tsv|json|jsonl|tsx?|jsx?|mjs|py|sh|css|toml|ya?ml|lua|rs|go|c|h|cpp|java|sql|tex|ini|conf|xml|log|docx?|xlsx?|pptx?|odt|odp|ods|rtf|avif|bmp|mp4|m4v|webm|mkv|mov|ogv|mp3|ogg|oga|opus|wav|m4a|flac)(?::\d+(?::\d+)?)?$/i;
 md.renderer.rules.code_inline = (tokens, i) => {
   const c = tokens[i]!.content, e = md.utils.escapeHtml(c);
   return RUTA.test(c) ? `<code class="ruta" data-ruta="${e}" title="Ver en el panel">${e}</code>` : `<code>${e}</code>`;

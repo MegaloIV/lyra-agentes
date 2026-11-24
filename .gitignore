@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# Notas internas (no se suben)
+notas/

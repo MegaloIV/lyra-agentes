@@ -31,6 +31,8 @@ export const estado = {
   panel: leerLocal<{ v: Panel }>('lyra-panel', { v: 'indice' }).v,
   /** Lo que muestra el visor (`vez` cambia al pedir el mismo archivo otra vez) */
   visor: null as { ruta: string; cwd: string; vez: number } | null,
+  /** Respuesta a «Abrir con…»: las apps que pueden abrir ese archivo */
+  apps: null as { ruta: string; apps: { id: string; nombre: string; predeterminada?: boolean }[] } | null,
   carpeta: { ruta: null as string | null, vez: 0 },
   primeraLista: false,
 };
@@ -55,11 +57,14 @@ function leerToken(): string {
 const token = leerToken();
 
 /** Lee un archivo para el visor (el servidor comprueba el token y la ruta) */
-export async function leerArchivo(ruta: string, cwd: string): Promise<{ tipo: string; datos: Blob; ruta: string }> {
-  const r = await fetch(`/api/archivo?ruta=${encodeURIComponent(ruta)}&cwd=${encodeURIComponent(cwd)}`, { headers: { 'X-Lyra-Token': token }, cache: 'no-store' });
+export async function leerArchivo(ruta: string, cwd: string, como?: 'pdf'): Promise<{ tipo: string; datos: Blob; ruta: string }> {
+  const r = await fetch(`/api/archivo?ruta=${encodeURIComponent(ruta)}&cwd=${encodeURIComponent(cwd)}${como ? '&como=' + como : ''}`, { headers: { 'X-Lyra-Token': token }, cache: 'no-store' });
   if (!r.ok) throw new Error((await r.text()) || 'No se pudo leer el archivo.');
   return { tipo: r.headers.get('Content-Type') || '', datos: await r.blob(), ruta: decodeURIComponent(r.headers.get('X-Ruta') || '') || ruta };
 }
+
+/** Videos y audio: el reproductor no manda cabeceras, el token va en la dirección (solo a este servidor) */
+export const urlMedio = (ruta: string, cwd: string) => `/api/medio?ruta=${encodeURIComponent(ruta)}&cwd=${encodeURIComponent(cwd)}&t=${token}`;
 
 let ws: WebSocket | null = null, espera = 1000, esperandoNuevo = 0, numeroError = 0;
 
@@ -201,6 +206,7 @@ function recibir(m: ServidorMensaje) {
       break;
     }
     case 'grupos': estado.grupos = m.grupos; break;
+    case 'aplicaciones': estado.apps = { ruta: m.ruta, apps: m.apps }; break;
     case 'enfocar': if (estado.agentes.some(a => a.id === m.agente)) elegir({ tipo: 'agente', id: m.agente }); break;
   }
   avisar();

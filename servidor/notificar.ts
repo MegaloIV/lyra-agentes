@@ -6,7 +6,7 @@ export function crearNotificador(visible: () => boolean, alAbrir: (id: string) =
     const ahora = Date.now();
     if (visible() || ahora - (ultimas.get(id) ?? -Infinity) < 5000) return;
     ultimas.set(id, ahora);
-    // «Agentes» y no «Lyra»: Lyra cuenta las notificaciones del escritorio salvo las suyas
+    // Se firman como «Agentes» para distinguirlas de otras apps llamadas Lyra
     execFile('notify-send', ['-a', 'Agentes', '-i', 'lyra-agentes', '-u', 'normal', '-A', 'default=Abrir', '--wait', '--', titulo, texto], (_e, salida) => {
       if (String(salida).trim() === 'default') alAbrir(id);
     });

@@ -218,7 +218,6 @@ function App() {
               </div>
               {v && (
                 <div class="iconos-grupo">
-                  <BotonIcono icono="codigo" titulo="Abrir la carpeta en Antigravity" onClick={() => enviar({ t: 'abrir', con: 'antigravity', cwd })} />
                   <BotonIcono icono="terminal" titulo="Abrir una terminal aquí" onClick={() => enviar({ t: 'abrir', con: 'terminal', cwd })} />
                   <BotonIcono icono="carpeta" titulo="Abrir la carpeta" onClick={() => enviar({ t: 'abrir', con: 'carpeta', cwd })} />
                   <BotonIcono icono="descargar" titulo="Guardar como Markdown (en Descargas)" onClick={() => guardarArchivo(nombreArchivo(titulo), exportar())} />

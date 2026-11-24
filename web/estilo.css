@@ -1,5 +1,5 @@
 /* Lyra (agentes) — diseño. Lo mantiene Claude: Codex no lo toca.
-   Paleta tomada de kitty (~/.config/kitty/theme.conf). */
+   Paleta oscura, la misma de la terminal. */
 
 :root {
   --fondo: #1c1d1b;          /* el de la terminal */
@@ -30,6 +30,7 @@
   --claude: #e39b74;
   --codex: #9cbfde;
   --gemini: #c38fd0;
+  --local: #8fc9a8;
 
   --letra: "Fira Sans", "Noto Sans", "Adwaita Sans", system-ui, sans-serif;
   --mono: "CaskaydiaCove Nerd Font Mono", "CaskaydiaCove Nerd Font", "DejaVu Sans Mono", monospace;
@@ -657,6 +658,7 @@ button.chip:hover { border-color: var(--borde-fuerte); color: var(--texto); }
 [data-proveedor="claude"] { --prov: var(--claude); }
 [data-proveedor="codex"] { --prov: var(--codex); }
 [data-proveedor="gemini"] { --prov: var(--gemini); }
+[data-proveedor="local"] { --prov: var(--local); }
 .proveedor-punto { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--prov, var(--apagado)); margin-right: .4rem; vertical-align: .08em; flex: none; }
 .chip[data-chip="proveedor"] { color: var(--prov); border-color: color-mix(in srgb, var(--prov) 35%, transparent); cursor: default; }
 .proveedor-marca { color: var(--prov); font-weight: 500; }
@@ -748,8 +750,8 @@ body.arrastrando iframe { pointer-events: none; }
 .buscador-proveedor[aria-pressed="true"] { opacity: 1; border-color: var(--prov); }
 .agente-acciones { flex: none; display: flex; gap: 0; align-items: center; }
 .agente-accion { width: 1.45rem; height: 1.45rem; }
-.agente:not(:hover) .agente-accion:not([data-armada]), .carpeta-cabecera:not(:hover) .agente-accion:not([data-armada]) { opacity: 0; width: 0; overflow: hidden; }
-.agente:hover .agente-accion, .carpeta-cabecera:hover .agente-accion { opacity: 1; }
+.agente:not(:hover) .agente-accion:not([data-armada]), .carpeta-cabecera:not(:hover) .agente-accion:not([data-armada]), .proyecto-titulo:not(:hover) .agente-accion { opacity: 0; width: 0; overflow: hidden; }
+.agente:hover .agente-accion, .carpeta-cabecera:hover .agente-accion, .proyecto-titulo:hover .agente-accion { opacity: 1; }
 .agente .ancla:has(.desplegable) .agente-accion { opacity: 1; width: 1.45rem; }
 .agente-accion[data-accion="mover"]:hover { color: var(--azul); }
 .agente-accion[data-armada="true"] {
@@ -868,3 +870,28 @@ body.arrastrando iframe { pointer-events: none; }
   background: var(--rojo); color: #1c1d1b; font-size: .7rem; font-weight: 700; padding: .05rem .4rem; border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .4);
 }
+
+/* Conversaciones agrupadas por la carpeta del proyecto */
+.proyecto-titulo { display: flex; align-items: center; gap: .2rem; padding-right: .25rem; }
+.proyecto-titulo .tramo-boton { flex: 1; min-width: 0; }
+.proyecto-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.proyecto-titulo { text-transform: none; letter-spacing: 0; font-size: .82rem; font-weight: 500; color: var(--texto); }
+
+/* Visor: páginas de PDF y Word, video y audio, «Abrir con…» */
+.paginas-barra { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: .1rem; padding: .25rem .5rem; background: var(--panel, var(--fondo)); border-bottom: 1px solid var(--borde); }
+.paginas-info { margin-right: auto; font-size: .74rem; color: var(--tenue); }
+.paginas-zoom { all: unset; cursor: pointer; font: .74rem var(--mono); color: var(--tenue); min-width: 2.8rem; text-align: center; border-radius: 4px; padding: .1rem .2rem; }
+.paginas-zoom:hover { color: var(--texto); background: var(--superficie); }
+.paginas { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px; background: #2a2b29; min-width: min-content; }
+.pdf-pagina { background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .45); flex: none; }
+.pdf-pagina canvas { display: block; }
+.paginas-docx { display: block; background: #2a2b29; }
+.paginas-docx .docx-wrapper { background: transparent; padding: 0; }
+.paginas-docx .docx-wrapper > section.docx { box-shadow: 0 2px 12px rgba(0, 0, 0, .45); margin: 0 auto 12px; }
+.visor-medio { flex: 1; display: grid; place-items: center; padding: .8rem; background: #000; }
+.visor-medio video { max-width: 100%; max-height: 100%; }
+.visor-medio audio { width: 100%; }
+.desplegable-nota { margin: .3rem .6rem; font-size: .78rem; color: var(--tenue); }
+.desplegable small { margin-left: auto; padding-left: .8rem; font-size: .7rem; color: var(--tenue); }
+.desplegable-derecha { right: 0; left: auto; }
+.redactor-aviso-suave { opacity: .75; }

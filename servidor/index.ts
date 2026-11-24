@@ -11,12 +11,12 @@ import { GestorAgentes } from './agentes.ts';
 import { elegirCarpeta } from './carpetas.ts';
 import { crearNotificador } from './notificar.ts';
 import { catalogo } from './catalogo.ts';
-import { abrirCon, abrirArchivo } from './abrir.ts';
-import { leerArchivo } from './archivos.ts';
+import { abrirCon, abrirArchivo, aplicaciones } from './abrir.ts';
+import { leerArchivo, comoPdf, servirMedio } from './archivos.ts';
 import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
 import { avisarCuota, cerrarCodex } from './codex.ts';
 // Si el servidor se lanzó desde una sesión de Claude Code, sus agentes heredarían estas variables y se
-// creerían sesiones hijas (no se guardan ni se pueden retomar). Lyra hace lo mismo en adaptadores/claude_code.py.
+// creerían sesiones hijas (no se guardan ni se pueden retomar).
 for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_AGENT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete process.env[k];
 const puerto = Number(process.env.LYRA_AGENTES_PUERTO || 4317);
 if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) throw new Error('LYRA_AGENTES_PUERTO debe ser un puerto válido.');
@@ -37,15 +37,25 @@ avisarCuota(() => void mandarCatalogo(true).catch(() => {}));
 void catalogo().catch(() => {});   // se arma al arrancar para que el diálogo lo tenga listo
 const servidor = createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; frame-src blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
-  // El visor: GET /api/archivo?ruta=…&cwd=…, con el token en la cabecera X-Lyra-Token
+  // Videos y audio: GET /api/medio?ruta=…&cwd=…&t=TOKEN (el reproductor no manda cabeceras propias)
+  if ((req.url || '').startsWith('/api/medio?')) {
+    const url = new URL(req.url!, `http://127.0.0.1:${puerto}`);
+    const sitio = req.headers['sec-fetch-site'];
+    if (!validarConexion(token, url.searchParams.get('t'), `http://127.0.0.1:${puerto}`, puerto) || (sitio && sitio !== 'same-origin')) { res.writeHead(401); res.end(); return; }
+    try { await servirMedio(req, res, url.searchParams.get('ruta') || '', url.searchParams.get('cwd') || ''); }
+    catch (e) { if (!res.headersSent) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(e instanceof Error ? e.message : 'No se pudo leer.'); } }
+    return;
+  }
+  // El visor: GET /api/archivo?ruta=…&cwd=…[&como=pdf], con el token en la cabecera X-Lyra-Token
   if ((req.url || '').startsWith('/api/archivo?')) {
     const url = new URL(req.url!, `http://127.0.0.1:${puerto}`);
     const sitio = req.headers['sec-fetch-site'];
     if (!validarConexion(token, String(req.headers['x-lyra-token'] || ''), `http://127.0.0.1:${puerto}`, puerto) || (sitio && sitio !== 'same-origin')) { res.writeHead(401); res.end(); return; }
     try {
-      const a = await leerArchivo(url.searchParams.get('ruta') || '', url.searchParams.get('cwd') || '');
+      const ruta = url.searchParams.get('ruta') || '', cwd = url.searchParams.get('cwd') || '';
+      const a = url.searchParams.get('como') === 'pdf' ? await comoPdf(ruta, cwd) : await leerArchivo(ruta, cwd);
       res.writeHead(200, { 'Content-Type': a.tipo, 'Cache-Control': 'no-store', 'X-Ruta': encodeURIComponent(a.ruta), 'Content-Security-Policy': "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; sandbox" });
       res.end(req.method === 'HEAD' ? undefined : a.datos);
     } catch (e) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(e instanceof Error ? e.message : 'No se pudo leer.'); }
@@ -54,7 +64,7 @@ const servidor = createServer(async (req, res) => {
   const archivo = await archivoPublico(dist, req.url || '/');
   if (!archivo) { res.writeHead(404); res.end('No encontrado'); return; }
   try {
-    const tipos: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.woff2': 'font/woff2' };
+    const tipos: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.woff2': 'font/woff2' };
     const datos = await readFile(archivo); res.writeHead(200, { 'Content-Type': tipos[extname(archivo)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(req.method === 'HEAD' ? undefined : datos);
   } catch { res.writeHead(404); res.end('No encontrado'); }
 });
@@ -86,7 +96,8 @@ servidor.on('upgrade', (req, socket, head) => {
           case 'comandos': emitir({ t: 'comandos', agente: m.agente, comandos: await gestor.obtener(m.agente).motor.comandos() }); break;
           case 'catalogo': enviar(ws, { t: 'catalogo', proveedores: await catalogo(true) }); break;
           case 'abrir': await abrirCon(m.con, m.cwd); break;
-          case 'abrirArchivo': await abrirArchivo(m.ruta, m.cwd); break;
+          case 'abrirArchivo': await abrirArchivo(m.ruta, m.cwd, m.app); break;
+          case 'aplicaciones': enviar(ws, { t: 'aplicaciones', ruta: m.ruta, apps: await aplicaciones(m.ruta, m.cwd) }); break;
           case 'guardarGrupos': emitir({ t: 'grupos', grupos: await guardarGrupos(m.grupos) }); break;
           case 'historial': emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'borrar': {

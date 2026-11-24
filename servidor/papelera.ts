@@ -49,9 +49,10 @@ export async function borrarSesion(proveedor: Proveedor, sessionId: string): Pro
   if (!ID.test(sessionId)) throw new Error('La conversación no es válida.');
   if (proveedor === 'codex') { await archivarCodex(sessionId); return 'Conversación archivada en Codex.'; }
   const rutas = proveedor === 'gemini' ? await archivosGemini(sessionId) : await archivosClaude(sessionId);
-  if (proveedor === 'claude' && !rutas.length) throw new Error('No se encontró el archivo de esa conversación.');
+  if ((proveedor === 'claude' || proveedor === 'local') && !rutas.length) throw new Error('No se encontró el archivo de esa conversación.');
   await aPapelera(rutas);
   if (proveedor === 'gemini') await quitarDeRegistro(sessionId);
+  if (proveedor === 'local') await (await import('./local.ts')).olvidarLocal(sessionId);
   return 'Conversación movida a la papelera.';
 }
 

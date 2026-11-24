@@ -10,6 +10,9 @@ ESTADO="$HOME/.local/state/lyra-agentes"
 PUERTO="${LYRA_AGENTES_PUERTO:-4317}"
 URL="http://127.0.0.1:$PUERTO"
 mkdir -p "$ESTADO"; chmod 700 "$ESTADO"
+# Ajustes propios (por ejemplo, dónde está Ollama para el agente local): variables de entorno, una por línea
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/lyra-agentes/entorno"
+if [[ -f "$CONFIG" ]]; then set -a; . "$CONFIG"; set +a; fi
 
 vivo() { curl -fs -o /dev/null --max-time 1 "$URL/"; }
 ventana() {   # PID de la ventana, buscado por su línea de comandos (sin pgrep -f, que se encuentra a sí mismo)
@@ -43,6 +46,9 @@ if ! vivo; then
 fi
 
 TOKEN="$(cat "$ESTADO/token")"
-# Dibuja con la Intel (Mesa), como Lyra, para no despertar la NVIDIA
-export GSK_RENDERER=gl __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
+# En equipos con dos tarjetas, dibuja con la integrada (Mesa) para no despertar la dedicada
+MESA=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+if [[ -z "${LYRA_AGENTES_GPU:-}" && -f "$MESA" ]]; then
+  export GSK_RENDERER=gl __EGL_VENDOR_LIBRARY_FILENAMES="$MESA" __GLX_VENDOR_LIBRARY_NAME=mesa
+fi
 setsid /usr/bin/python3 "$DIR/ventana/ventana.py" "$URL/?t=$TOKEN" >> "$ESTADO/ventana.log" 2>&1 < /dev/null &

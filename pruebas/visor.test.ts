@@ -29,7 +29,7 @@ test('el visor no muestra carpetas ocultas ni rutas fuera de casa, /tmp o /mnt/s
 });
 
 test('las carpetas propias descartan datos inválidos y sesiones huérfanas', () => {
-  const g = limpiarGrupos({ carpetas: [{ id: 'a1', nombre: '  Tesis  ' }, { id: 'a1', nombre: 'repetida' }, { id: '../x', nombre: 'mala' }, { id: 'b2', nombre: '' }], sesiones: { s1: 'a1', s2: 'zz', s3: 5 } });
-  assert.deepEqual(g, { carpetas: [{ id: 'a1', nombre: 'Tesis', abierta: true }], sesiones: { s1: 'a1' } });
+  const g = limpiarGrupos({ carpetas: [{ id: 'a1', nombre: '  Trabajo  ' }, { id: 'a1', nombre: 'repetida' }, { id: '../x', nombre: 'mala' }, { id: 'b2', nombre: '' }], sesiones: { s1: 'a1', s2: 'zz', s3: 5 } });
+  assert.deepEqual(g, { carpetas: [{ id: 'a1', nombre: 'Trabajo', abierta: true }], sesiones: { s1: 'a1' } });
   assert.deepEqual(limpiarGrupos(null), { carpetas: [], sesiones: {} });
 });
