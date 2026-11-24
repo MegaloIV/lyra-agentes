@@ -101,6 +101,10 @@ function leerAnchos(): Record<'indice' | 'visor', number> {
   try { return { indice: 240, visor: 460, ...JSON.parse(localStorage.getItem('lyra-anchos') || '{}') }; } catch { return { indice: 240, visor: 460 }; }
 }
 
+/** Ancho de la barra de la izquierda (en px); se cambia arrastrando su borde derecho */
+const BARRA = 272;
+function leerBarra(): number { try { const n = Number(localStorage.getItem('lyra-barra')); return n >= 200 && n <= 520 ? n : BARRA; } catch { return BARRA; } }
+
 /** Archivos ya vistos por conversación, para el punto del visor y para abrirlo solo con una imagen nueva */
 const vistos = new Map<string, Set<string>>();
 
@@ -119,6 +123,7 @@ function App() {
   const alternar = (p: Exclude<Panel, null>) => ponerPanel(panel === p ? null : p);
   useEffect(() => { if (angosto && estado.panel === 'visor' && estado.visor) setPanelAngosto('visor'); }, [estado.visor?.vez]);
   const [anchos, setAnchos] = useState(leerAnchos);
+  const [anchoBarra, setAnchoBarra] = useState(leerBarra);
   const [cajon, setCajon] = useState(false);
   const [entradas, setEntradas] = useState<{ lista: Entrada[]; activo: string }>({ lista: [], activo: '' });
   const [irA, setIrA] = useState({ id: '', vez: 0 });
@@ -189,6 +194,17 @@ function App() {
     window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
   }
 
+  function arrastrarBarra(e: PointerEvent) {
+    if (matchMedia('(max-width: 760px)').matches) return;
+    e.preventDefault();
+    const inicio = e.clientX, base = anchoBarra;
+    let ultimo = base;
+    const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + ev.clientX - inicio, 200), Math.min(520, window.innerWidth * 0.4))); setAnchoBarra(ultimo); };
+    const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); guardarLocal('lyra-barra', ultimo); document.body.classList.remove('arrastrando'); };
+    document.body.classList.add('arrastrando');
+    window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
+  }
+
   const botonesPanel = (
     <div class="iconos-grupo">
       <BotonIcono icono="indice" titulo="Índice (Ctrl+I)" activo={panel === 'indice'} onClick={() => alternar('indice')} />
@@ -197,8 +213,8 @@ function App() {
   );
 
   return (
-    <div id="app" class="lyra" data-panel={v && panel ? panel : 'oculto'} style={{ '--panel': `${ancho}px` } as Record<string, string>}>
-      <Barra abierta={cajon} onNuevo={() => { elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); }} onCerrarCajon={() => setCajon(false)} />
+    <div id="app" class="lyra" data-panel={v && panel ? panel : 'oculto'} style={{ '--panel': `${ancho}px`, '--barra': `${anchoBarra}px` } as Record<string, string>}>
+      <Barra abierta={cajon} onBorde={arrastrarBarra} onBordeDoble={() => { setAnchoBarra(BARRA); guardarLocal('lyra-barra', BARRA); }} onNuevo={() => { elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); }} onCerrarCajon={() => setCajon(false)} />
       <main class="lectura">
         {estado.rechazado ? (
           <div class="vacio">

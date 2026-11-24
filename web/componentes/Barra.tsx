@@ -31,6 +31,17 @@ const ORDENES: { valor: Orden; nombre: string; titulo: string }[] = [
 
 /** Arrastrar una conversación a una carpeta */
 const ARRASTRE = 'application/x-lyra-sesion';
+/** Empieza a arrastrar una conversación. La imagen que se arrastra es una ficha chica con el título: la de WebKit
+ *  (la fila entera, escalada) salía gigante */
+function arrastrar(e: DragEvent, sessionId: string, titulo: string) {
+  const dt = e.dataTransfer; if (!dt) return;
+  dt.setData(ARRASTRE, sessionId); dt.effectAllowed = 'move';
+  const ficha = document.createElement('div');
+  ficha.className = 'arrastre-ficha'; ficha.textContent = titulo;
+  document.body.appendChild(ficha);
+  dt.setDragImage(ficha, 14, 14);
+  setTimeout(() => ficha.remove(), 0);
+}
 function soltable(destino: string | null, marcado: string | null, setMarcado: (v: string | null) => void) {
   const clave = destino ?? '';
   return {
@@ -70,7 +81,7 @@ function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; on
   const objetivo: Objetivo = { proveedor: a.proveedor, titulo: a.titulo, agente: a.id, sessionId: a.sessionId, cwd: a.cwd, trabajando: a.estado === 'trabajando' };
   return (
     <li class="agente" data-estado={a.estado} data-proveedor={a.proveedor} aria-current={actual ? 'true' : undefined} onClick={onElegir}
-      draggable={!!a.sessionId} onDragStart={e => a.sessionId && e.dataTransfer?.setData(ARRASTRE, a.sessionId)}
+      draggable={!!a.sessionId} onDragStart={e => a.sessionId && arrastrar(e, a.sessionId, a.titulo)}
       title={`${a.titulo}\n${nombreProveedor(a.proveedor)} · ${rutaCorta(a.cwd)}`}>
       <span class="agente-estado" />
       <div class="agente-texto">
@@ -92,7 +103,7 @@ function Fila({ s, onElegir, enProyecto = false }: { s: Sesion; onElegir: () => 
   const objetivo: Objetivo = { proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd };
   return (
     <li class="agente" data-estado="historial" data-proveedor={s.proveedor} aria-current={v?.tipo === 'sesion' && v.sessionId === s.sessionId ? 'true' : undefined}
-      draggable onDragStart={e => e.dataTransfer?.setData(ARRASTRE, s.sessionId)}
+      draggable onDragStart={e => arrastrar(e, s.sessionId, s.titulo)}
       title={`${s.titulo}\n${nombreProveedor(s.proveedor)} · ${rutaCorta(s.cwd)}`} onClick={() => { elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor }); onElegir(); }}>
       <span class="agente-estado" />
       <div class="agente-texto">
@@ -107,7 +118,7 @@ function Fila({ s, onElegir, enProyecto = false }: { s: Sesion; onElegir: () => 
   );
 }
 
-export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void }) {
+export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void; onBorde: (e: PointerEvent) => void; onBordeDoble: () => void }) {
   const [filtro, setFiltro] = useState<Proveedor | ''>('');
   const [busqueda, setBusqueda] = useState('');
   const [plegado, setPlegado] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem(PLEGADO) || '{}'); } catch { return {}; } });
@@ -142,6 +153,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
 
   return (
     <aside class="agentes" data-abierto={String(abierta)}>
+      <div class="barra-borde" onPointerDown={onBorde} onDblClick={onBordeDoble} title="Arrastra para cambiar el ancho (doble clic: el de siempre)" />
       <header class="agentes-cabecera">
         <span class="marca">Lyra</span>
         <BotonIcono icono="carpetaNueva" titulo="Nueva carpeta" onClick={() => { const id = crearCarpeta('Nueva carpeta'); estado.editando = `carpeta:${id}`; avisar(); }} />
