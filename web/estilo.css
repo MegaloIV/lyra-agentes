@@ -897,11 +897,22 @@ body.arrastrando iframe { pointer-events: none; }
 .desplegable-derecha { right: 0; left: auto; }
 .redactor-aviso-suave { opacity: .75; }
 
-/* ───────── En la ventana propia: solo la barra de la izquierda es translúcida ─────────
-   La ventana GTK es transparente y no tiene opacidad propia en Hyprland: cada zona pone la suya. La lectura y
-   el panel derecho (índice y visor) van opacos; la barra deja ver el escritorio como antes (90 %). */
-:root { --opacidad-barra: .9; }
+/* ───────── En la ventana propia: cada zona pone su transparencia ─────────
+   La ventana GTK es transparente y Hyprland no le pone opacidad propia (ver el README): la barra de la izquierda
+   deja ver el escritorio (90 %) y la lectura, el índice y el visor mucho menos (96 %). Sin foco, Hyprland baja toda la
+   ventana un poco más (regla `opacity = "1.0 override 0.85 override"`).
+   En una ventana angosta la barra es un cajón translúcido: el texto de debajo se esconde y se ve el escritorio. */
+:root { --opacidad-barra: .9; --opacidad-lectura: .96; --ancho-cajon: min(17rem, 85vw); }
 html[data-ventana] body { background: transparent; }
-html[data-ventana] .lectura { background: var(--fondo); }
+html[data-ventana] .lectura { background: rgb(28 29 27 / var(--opacidad-lectura)); }
+/* Dentro de la lectura, lo que pintaba el mismo fondo sólido queda sin fondo (ya lo pone la lectura) */
+html[data-ventana] .lectura-cabecera { background: transparent; }
+html[data-ventana] .redactor { background: none; }
+html[data-ventana] .turno-hora { background: rgb(28 29 27); border-radius: 4px; }
+html[data-ventana] .panel { background: rgb(23 24 22 / var(--opacidad-lectura)); }
 html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra)); }
-@media (max-width: 760px) { html[data-ventana] .agentes { background: var(--fondo-hondo); } }   /* como cajón, encima del texto */
+@media (max-width: 760px) {
+  html[data-ventana] .agentes { width: var(--ancho-cajon); box-shadow: none; }
+  /* Lo que queda debajo del cajón se recorta: ahí se ve el escritorio, no el texto */
+  html[data-ventana] .lyra:has(.agentes[data-abierto="true"]) .lectura { clip-path: inset(0 0 0 var(--ancho-cajon)); }
+}

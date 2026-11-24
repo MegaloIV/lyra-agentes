@@ -21,7 +21,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk, WebKit  # noqa: E402
 
 # La ventana es transparente y la página decide cuánto: la barra de la izquierda deja ver el fondo del
 # escritorio y la lectura y el panel derecho quedan opacos. Para eso, en Hyprland conviene que la ventana
-# no tenga opacidad propia (regla `opacity = "1.0 override 1.0 override"` para la clase io.lyra.Agentes).
+# no tenga opacidad propia (regla `opacity = "1.0 override 0.85 override"` para la clase io.lyra.Agentes: opaca con foco, un poco menos sin él).
 TRANSPARENTE = "rgba(0,0,0,0)"
 DATOS = os.path.join(GLib.get_user_data_dir(), "lyra-agentes", "web")
 CACHE = os.path.join(GLib.get_user_cache_dir(), "lyra-agentes")
@@ -74,8 +74,9 @@ class Ventana(Gtk.Application):
         ventana.set_child(vista)
         ventana.add_css_class("lyra-transparente")
         css = Gtk.CssProvider()
-        css.load_from_string("window.lyra-transparente { background: transparent; }")
-        Gtk.StyleContext.add_provider_for_display(ventana.get_display(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        # Por encima del gtk.css del usuario (prioridad USER), que suele pintar `.background` de un color sólido
+        css.load_from_string("window.lyra-transparente, window.lyra-transparente.background { background: none; background-color: transparent; }")
+        Gtk.StyleContext.add_provider_for_display(ventana.get_display(), css, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
         teclas = Gtk.EventControllerKey()
         teclas.connect("key-pressed", self.al_tecla)
         ventana.add_controller(teclas)

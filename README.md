@@ -73,13 +73,13 @@ Variables de entorno; también se pueden escribir, una por línea, en `~/.config
 | `LYRA_AGENTES_TERMINAL` | Terminal para «Abrir terminal aquí» (si no, `$TERMINAL` o la primera instalada). |
 | `LYRA_AGENTES_GPU` | Si tiene algún valor, la ventana no fuerza la tarjeta integrada en equipos con dos. |
 
-**Transparencia:** en la ventana propia, la barra de la izquierda es translúcida (90 %) y la lectura, el índice y el visor son opacos. Si tu compositor le pone opacidad a todas las ventanas, quítasela a esta para que no se sume. En Hyprland:
+**Transparencia:** en la ventana propia, la barra de la izquierda es translúcida (90 %) y la lectura, el índice y el visor casi opacos (96 %); sin foco, el compositor baja toda la ventana a 85 %. Si tu compositor le pone opacidad a todas las ventanas, quítasela a esta (dejando solo una baja cuando no tiene el foco) para que no se sume. En Hyprland:
 
 ```lua
-hl.window_rule({ name = "lyra_agentes", match = { class = "^(io\\.lyra\\.Agentes)$" }, opacity = "1.0 override 1.0 override" })
+hl.window_rule({ name = "lyra_agentes", match = { class = "^(io\\.lyra\\.Agentes)$" }, opacity = "1.0 override 0.85 override" })
 ```
 
-La opacidad de la barra se cambia con la variable CSS `--opacidad-barra` en `web/estilo.css`.
+Las opacidades se cambian con las variables CSS `--opacidad-barra` y `--opacidad-lectura` en `web/estilo.css`.
 
 El estado se guarda en `~/.local/state/lyra-agentes/`: el token, las carpetas propias y el registro de las sesiones locales. Las conversaciones quedan donde las guarda cada CLI (`~/.claude`, `~/.codex`, `~/.gemini`).
 
