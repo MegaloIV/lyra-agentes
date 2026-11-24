@@ -1,5 +1,8 @@
 // Claude Code por el Agent SDK.
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { query, listSessions, getSessionMessages, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Query, SDKUserMessage, CanUseTool, PermissionResult, EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import type { AskUserQuestionInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
@@ -33,8 +36,25 @@ export async function modelosClaude(): Promise<Modelo[]> {
   const q = query({ prompt: vacia, options: { pathToClaudeCodeExecutable: EJECUTABLE, settingSources: ['user'], env: { ...process.env } } });
   try {
     const lista = await Promise.race([q.supportedModels(), new Promise<never>((_, mal) => setTimeout(() => mal(new Error('tiempo')), 20000))]);
-    return lista.map(m => ({ valor: m.value === 'default' ? null : m.value, nombre: m.value === 'default' ? 'Predeterminado' : m.displayName, descripcion: m.description, esfuerzos: m.supportsEffort ? m.supportedEffortLevels : undefined }));
+    for (const m of lista) if (m.resolvedModel) resueltos.set(m.value === 'default' ? null : m.value, m.resolvedModel);
+    return conEsfuerzoClaude(lista.map(m => ({ valor: m.value === 'default' ? null : m.value, nombre: m.value === 'default' ? 'Predeterminado' : m.displayName, descripcion: m.description, esfuerzos: m.supportsEffort ? m.supportedEffortLevels : undefined })));
   } finally { vacia.cerrar(); q.close(); }
+}
+
+/** El id real detrás de cada alias («opus» → claude-opus-5-5), para buscar su ajuste */
+const resueltos = new Map<string | null, string>();
+/** El esfuerzo que usa Claude Code si Lyra no elige ninguno: el del modelo en ~/.claude/settings.json o, si no, el general.
+ *  Se lee cada vez, así un cambio en el archivo se ve sin reiniciar. */
+export function conEsfuerzoClaude(lista: Modelo[]): Modelo[] {
+  let ajustes: { effortLevel?: unknown; modelSettings?: Record<string, { effortLevel?: unknown }> } = {};
+  try { ajustes = JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json'), 'utf8')); } catch { /* sin ajustes */ }
+  const texto = (v: unknown) => typeof v === 'string' && v ? v : undefined;
+  return lista.map(m => {
+    if (!m.esfuerzos) return m;
+    const id = resueltos.get(m.valor) ?? m.valor ?? undefined;
+    const defecto = texto(id && ajustes.modelSettings?.[id]?.effortLevel) ?? texto(ajustes.effortLevel);
+    return { ...m, esfuerzoDefecto: defecto && m.esfuerzos.includes(defecto) ? defecto : undefined };
+  });
 }
 
 /** Los límites del plan de claude.ai (los mismos de /usage), de la API experimental del SDK */
