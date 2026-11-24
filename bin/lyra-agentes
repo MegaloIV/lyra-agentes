@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Lyra · Agentes: abre (y si hace falta arranca) la ventana para leer y manejar agentes de Claude, Codex y Gemini.
+# Uso: lyra-agentes             abre la ventana (si ya está abierta, la trae al frente)
+#      lyra-agentes --cerrar    cierra la ventana (el servidor y los agentes siguen)
+#      lyra-agentes --detener   detiene el servidor (cierra los agentes que estén corriendo)
+#      lyra-agentes --log       muestra el registro del servidor
+set -euo pipefail
+DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
+ESTADO="$HOME/.local/state/lyra-agentes"
+PUERTO="${LYRA_AGENTES_PUERTO:-4317}"
+URL="http://127.0.0.1:$PUERTO"
+mkdir -p "$ESTADO"; chmod 700 "$ESTADO"
+
+vivo() { curl -fs -o /dev/null --max-time 1 "$URL/"; }
+ventana() {   # PID de la ventana, buscado por su línea de comandos (sin pgrep -f, que se encuentra a sí mismo)
+  for d in /proc/[0-9]*; do
+    case "$(cat "$d/comm" 2>/dev/null)" in python*) ;; *) continue ;; esac
+    tr '\0' ' ' <"$d/cmdline" 2>/dev/null | grep -q -- "ventana/ventana.py" && echo "${d#/proc/}"
+  done
+}
+
+case "${1:-}" in
+  --detener)
+    if [[ -f "$ESTADO/servidor.pid" ]] && kill -0 "$(cat "$ESTADO/servidor.pid")" 2>/dev/null; then
+      kill "$(cat "$ESTADO/servidor.pid")" && echo "Servidor detenido."
+    else echo "El servidor no estaba corriendo."; fi
+    rm -f "$ESTADO/servidor.pid"; exit 0 ;;
+  --cerrar) p=$(ventana); [[ -n "$p" ]] && kill $p; exit 0 ;;
+  --log) exec less +G "$ESTADO/servidor.log" ;;
+esac
+
+if ! vivo; then
+  cd "$DIR"
+  # Reconstruye la interfaz si falta o si hay fuentes más nuevas que dist/
+  if [[ ! -f dist/index.html ]] || [[ -n "$(find web servidor -newer dist/index.html -type f 2>/dev/null | head -1)" ]]; then
+    npx vite build >> "$ESTADO/servidor.log" 2>&1 || { notify-send -a Agentes -u critical "Lyra" "No se pudo construir la interfaz (lyra-agentes --log)"; exit 1; }
+  fi
+  # Sin las variables de una sesión de Claude Code (el servidor también las borra)
+  env -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT setsid node servidor/index.ts >> "$ESTADO/servidor.log" 2>&1 < /dev/null &
+  echo $! > "$ESTADO/servidor.pid"
+  for _ in $(seq 1 50); do vivo && break; sleep 0.2; done
+  vivo || { notify-send -a Agentes -u critical "Lyra" "El servidor no arrancó (lyra-agentes --log)"; exit 1; }
+fi
+
+TOKEN="$(cat "$ESTADO/token")"
+# Dibuja con la Intel (Mesa), como Lyra, para no despertar la NVIDIA
+export GSK_RENDERER=gl __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
+setsid /usr/bin/python3 "$DIR/ventana/ventana.py" "$URL/?t=$TOKEN" >> "$ESTADO/ventana.log" 2>&1 < /dev/null &

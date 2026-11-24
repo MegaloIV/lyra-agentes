@@ -1,4 +1,5 @@
-import type { Bloque } from '@protocolo';
+import type { Bloque, InfoProveedor, Modelo, Proveedor } from '@protocolo';
+import { estado } from './tienda.ts';
 
 export type Herr = Extract<Bloque, { tipo: 'herramienta' }>;
 
@@ -49,15 +50,21 @@ export const MODOS = [
   { valor: 'auto', nombre: 'Automático' },
   { valor: 'bypassPermissions', nombre: 'Sin preguntar' },
 ] as const;
-export const nombreModo = (m: string) => MODOS.find(x => x.valor === m)?.nombre || m;
+export const nombreModo = (m: string, proveedor?: Proveedor) => estado.catalogo.find(p => p.id === proveedor)?.modos.find(x => x.valor === m)?.nombre || MODOS.find(x => x.valor === m)?.nombre || m;
 
-export const MODELOS = [
-  { valor: null, nombre: 'Predeterminado' },
-  { valor: 'opus', nombre: 'Opus' },
-  { valor: 'sonnet', nombre: 'Sonnet' },
-  { valor: 'haiku', nombre: 'Haiku' },
-  { valor: 'claude-fable-5-2', nombre: 'Fable' },
-] as const;
+export const PROVEEDORES: { id: Proveedor; nombre: string }[] = [{ id: 'claude', nombre: 'Claude' }, { id: 'codex', nombre: 'Codex' }, { id: 'gemini', nombre: 'Gemini' }];
+export const nombreProveedor = (p?: Proveedor) => PROVEEDORES.find(x => x.id === p)?.nombre || 'Claude';
+export const info = (p?: Proveedor): InfoProveedor | undefined => estado.catalogo.find(x => x.id === (p || 'claude'));
+
+const ESFUERZOS: Record<string, string> = { minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo', ultra: 'Ultra', none: 'Sin razonar' };
+export const nombreEsfuerzo = (e?: string) => !e ? 'Esfuerzo normal' : ESFUERZOS[e] || e;
+
+/** El modelo que usa un agente, como lo llama su proveedor */
+export function modeloDe(proveedor: Proveedor | undefined, id?: string): { nombre: string; modelo?: Modelo } {
+  const lista = info(proveedor)?.modelos || [];
+  const modelo = lista.find(m => m.valor === (id ?? null)) || (id ? lista.find(m => m.valor && (id.startsWith(m.valor) || m.valor.startsWith(id))) : undefined);
+  return { nombre: modelo && modelo.valor ? modelo.nombre : id ? (proveedor === 'claude' || !proveedor ? nombreModelo(id) : id) : 'Predeterminado', modelo };
+}
 
 /** claude-opus-5-5 → Opus 5.5; opus → Opus */
 export function nombreModelo(id?: string): string {
@@ -100,4 +107,22 @@ const extensiones: Record<string, string> = { ts: 'typescript', tsx: 'typescript
 export function lenguajeDe(ruta: string): string | undefined {
   const ext = /\.([a-z0-9]+)$/i.exec(ruta)?.[1]?.toLowerCase();
   return ext ? extensiones[ext] : undefined;
+}
+
+/** La conversación entera como Markdown, para guardarla */
+export function aMarkdown(bloques: Bloque[], titulo: string, quien: string, cwd: string): string {
+  const salida = [`# ${titulo}`, '', `*${quien} · ${rutaCorta(cwd)} · ${new Date().toLocaleString('es')}*`, ''];
+  for (const b of bloques) {
+    if ('padre' in b && b.padre) continue;
+    switch (b.tipo) {
+      case 'usuario': salida.push('---', '', `**Tú**${b.fecha ? ` · ${hora(b.fecha)}` : ''}`, '', b.md, ''); break;
+      case 'texto': if (b.md.trim()) salida.push(b.md, ''); break;
+      case 'herramienta': salida.push(`- ${b.estado === 'error' ? '✗' : '·'} ${b.resumen}`); break;
+      case 'tareas': salida.push('', ...b.items.map(t => `- [${t.estado === 'hecha' ? 'x' : ' '}] ${t.texto}`), ''); break;
+      case 'plan': salida.push('', '**Plan propuesto**', '', b.md, ''); break;
+      case 'sistema': salida.push('', `> ${b.texto}`, ''); break;
+      case 'fin': if (b.error) salida.push('', `> ${b.error}`, ''); break;
+    }
+  }
+  return salida.join('\n').replace(/\n{3,}/g, '\n\n');
 }

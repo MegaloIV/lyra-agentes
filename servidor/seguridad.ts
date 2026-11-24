@@ -8,7 +8,7 @@ export function validarConexion(token: string, recibido: string | null, origen: 
   const a = Buffer.from(token), b = Buffer.from(recibido || '');
   return a.length === 64 && b.length === a.length && timingSafeEqual(a, b) && origenes.includes(origen || '');
 }
-export async function cargarToken(base = join(homedir(), '.local/state/atril')): Promise<string> {
+export async function cargarToken(base = join(homedir(), '.local/state/lyra-agentes')): Promise<string> {
   await mkdir(base, { recursive: true, mode: 0o700 }); await chmod(base, 0o700);
   const archivo = join(base, 'token');
   try { const f = await open(archivo, 'wx', 0o600); try { await f.writeFile(randomBytes(32).toString('hex')); } finally { await f.close(); } }

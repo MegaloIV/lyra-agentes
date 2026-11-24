@@ -1,6 +1,7 @@
-import type { ResumenAgente, Sesion } from '@protocolo';
+import { useState } from 'preact/hooks';
+import type { Proveedor, ResumenAgente, Sesion } from '@protocolo';
 import { estado, elegir, enviar } from '../tienda.ts';
-import { haceCuanto, nombreCarpeta, rutaCorta } from '../util.ts';
+import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from '../util.ts';
 
 const GRUPOS = [
   { clave: 'atencion', titulo: 'Necesitan tu atención', estados: ['esperando', 'error'] },
@@ -10,12 +11,12 @@ const GRUPOS = [
 
 function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; onElegir: () => void }) {
   return (
-    <li class="agente" data-estado={a.estado} aria-current={actual ? 'true' : undefined} onClick={onElegir}
-      title={`${a.titulo}\n${rutaCorta(a.cwd)}`}>
+    <li class="agente" data-estado={a.estado} data-proveedor={a.proveedor} aria-current={actual ? 'true' : undefined} onClick={onElegir}
+      title={`${a.titulo}\n${nombreProveedor(a.proveedor)} · ${rutaCorta(a.cwd)}`}>
       <span class="agente-estado" />
       <div class="agente-texto">
         <span class="agente-titulo">{a.titulo}</span>
-        <span class="agente-meta">{nombreCarpeta(a.cwd)} · {a.estado === 'esperando' ? 'espera tu respuesta' : a.estado === 'error' ? 'se detuvo' : haceCuanto(a.ultimaActividad)}</span>
+        <span class="agente-meta"><span class="proveedor-marca" data-proveedor={a.proveedor}>{nombreProveedor(a.proveedor)}</span> {nombreCarpeta(a.cwd)} · {a.estado === 'esperando' ? 'espera tu respuesta' : a.estado === 'error' ? 'se detuvo' : haceCuanto(a.ultimaActividad)}</span>
       </div>
       {a.sinLeer && !actual && <span class="agente-sinleer" title="Terminó y no lo has visto" />}
       <button class="agente-cerrar" title="Cerrar (la sesión queda en el historial)" onClick={e => { e.stopPropagation(); enviar({ t: 'cerrar', agente: a.id }); }}>×</button>
@@ -24,29 +25,45 @@ function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; on
 }
 
 function Historial({ sesiones, onElegir }: { sesiones: Sesion[]; onElegir: () => void }) {
+  const [filtro, setFiltro] = useState<Proveedor | ''>('');
+  const [busqueda, setBusqueda] = useState('');
   const abiertas = new Set(estado.agentes.map(a => a.sessionId).filter(Boolean));
   const porCarpeta = new Map<string, Sesion[]>();
+  const q = busqueda.trim().toLowerCase();
+  const hay = new Set(sesiones.map(s => s.proveedor));
   for (const s of sesiones) {
     if (abiertas.has(s.sessionId)) continue;
+    if (filtro && s.proveedor !== filtro) continue;
+    if (q && !`${s.titulo} ${s.cwd}`.toLowerCase().includes(q)) continue;
     const l = porCarpeta.get(s.cwd) || []; l.push(s); porCarpeta.set(s.cwd, l);
   }
   const carpetas = [...porCarpeta.entries()].sort((a, b) => b[1][0]!.modificado - a[1][0]!.modificado);
   const v = estado.vista;
-  if (!carpetas.length) return null;
+  if (!sesiones.length) return null;
   return (
     <section class="grupo" data-grupo="historial">
       <h3 class="grupo-titulo">Historial <span class="grupo-cuenta">{carpetas.reduce((n, c) => n + c[1].length, 0)}</span></h3>
+      <div class="historial-filtros">
+        <input type="search" class="historial-buscar" placeholder="Buscar…" value={busqueda} onInput={e => setBusqueda((e.currentTarget as HTMLInputElement).value)} />
+        {hay.size > 1 && (
+          <div class="historial-proveedores">
+            <button type="button" aria-pressed={!filtro} onClick={() => setFiltro('')}>Todos</button>
+            {PROVEEDORES.filter(p => hay.has(p.id)).map(p => <button type="button" key={p.id} data-proveedor={p.id} aria-pressed={filtro === p.id} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}>{p.nombre}</button>)}
+          </div>
+        )}
+      </div>
+      {!carpetas.length && <p class="historial-vacio">Nada coincide.</p>}
       {carpetas.map(([cwd, lista]) => (
-        <details class="historial-carpeta" key={cwd} open={v?.tipo === 'sesion' && v.cwd === cwd}>
+        <details class="historial-carpeta" key={cwd} open={!!q || (v?.tipo === 'sesion' && v.cwd === cwd)}>
           <summary title={rutaCorta(cwd)}>{nombreCarpeta(cwd)} <span class="grupo-cuenta">{lista.length}</span></summary>
           <ul class="grupo-lista">
             {lista.map(s => (
-              <li key={s.sessionId} class="agente" data-estado="historial" aria-current={v?.tipo === 'sesion' && v.sessionId === s.sessionId ? 'true' : undefined}
-                title={s.titulo} onClick={() => { elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd }); onElegir(); }}>
+              <li key={s.proveedor + s.sessionId} class="agente" data-estado="historial" data-proveedor={s.proveedor} aria-current={v?.tipo === 'sesion' && v.sessionId === s.sessionId ? 'true' : undefined}
+                title={s.titulo} onClick={() => { elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor }); onElegir(); }}>
                 <span class="agente-estado" />
                 <div class="agente-texto">
                   <span class="agente-titulo">{s.titulo}</span>
-                  <span class="agente-meta">{haceCuanto(s.modificado)}{s.rama ? ` · ${s.rama}` : ''}</span>
+                  <span class="agente-meta"><span class="proveedor-marca" data-proveedor={s.proveedor}>{nombreProveedor(s.proveedor)}</span> {haceCuanto(s.modificado)}{s.rama ? ` · ${s.rama}` : ''}</span>
                 </div>
               </li>
             ))}
@@ -63,7 +80,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
   return (
     <aside class="agentes" data-abierto={String(abierta)}>
       <header class="agentes-cabecera">
-        <span class="marca">Atril</span>
+        <span class="marca">Lyra</span>
         <button class="boton-nuevo" title="Nuevo agente (Alt+N)" onClick={onNuevo}>+ Nuevo</button>
       </header>
       {GRUPOS.map(g => {

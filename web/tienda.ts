@@ -1,9 +1,9 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Proveedor } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
-export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string } | null;
+export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string; proveedor?: Proveedor } | null;
 export type Documento = { bloques: Bloque[]; soloLectura: boolean };
 
 export const estado = {
@@ -12,6 +12,7 @@ export const estado = {
   agentes: [] as ResumenAgente[],
   documentos: new Map<string, Documento>(),
   historial: [] as Sesion[],
+  catalogo: [] as InfoProveedor[],
   comandos: new Map<string, Comando[]>(),
   vista: null as Vista,
   errores: [] as { id: number; texto: string }[],
@@ -32,8 +33,8 @@ export function avisar() {
 function leerToken(): string {
   const url = new URL(location.href), t = url.searchParams.get('t');
   try {
-    if (t) { sessionStorage.setItem('atril-token', t); url.searchParams.delete('t'); history.replaceState(null, '', url.pathname + url.search + url.hash); }
-    return t || sessionStorage.getItem('atril-token') || '';
+    if (t) { sessionStorage.setItem('lyra-token', t); url.searchParams.delete('t'); history.replaceState(null, '', url.pathname + url.search + url.hash); }
+    return t || sessionStorage.getItem('lyra-token') || '';
   } catch { return t || ''; }
 }
 const token = leerToken();
@@ -42,7 +43,7 @@ let ws: WebSocket | null = null, espera = 1000, esperandoNuevo = 0, numeroError 
 
 export function enviar(m: ClienteMensaje) {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
-  else mostrarError('Sin conexión con Atril. Se reintentará en unos segundos.');
+  else mostrarError('Sin conexión con el servidor. Se reintentará en unos segundos.');
 }
 
 export function mostrarError(texto: string) {
@@ -60,7 +61,7 @@ export function crearAgente(m: Extract<ClienteMensaje, { t: 'crear' | 'reanudar'
 
 export function elegir(vista: Vista) {
   estado.vista = vista;
-  try { sessionStorage.setItem('atril-vista', JSON.stringify(vista)); } catch {}
+  try { sessionStorage.setItem('lyra-vista', JSON.stringify(vista)); } catch {}
   if (vista?.tipo === 'agente') {
     enviar({ t: 'leer', agente: vista.id });
     if (!estado.comandos.has(vista.id)) enviar({ t: 'comandos', agente: vista.id });
@@ -68,7 +69,7 @@ export function elegir(vista: Vista) {
   if (vista?.tipo === 'sesion') {
     const abierto = estado.agentes.find(a => a.sessionId === vista.sessionId);
     if (abierto) return elegir({ tipo: 'agente', id: abierto.id });
-    if (!estado.documentos.has(vista.sessionId)) enviar({ t: 'abrirSesion', sessionId: vista.sessionId, cwd: vista.cwd });
+    if (!estado.documentos.has(vista.sessionId)) enviar({ t: 'abrirSesion', sessionId: vista.sessionId, cwd: vista.cwd, proveedor: vista.proveedor });
   }
   avisar();
 }
@@ -84,7 +85,7 @@ function recibir(m: ServidorMensaje) {
       if (!estado.primeraLista) {
         estado.primeraLista = true;
         try {
-          const guardada = JSON.parse(sessionStorage.getItem('atril-vista') || 'null') as Vista;
+          const guardada = JSON.parse(sessionStorage.getItem('lyra-vista') || 'null') as Vista;
           if (guardada?.tipo === 'agente' && m.agentes.some(a => a.id === guardada.id)) elegir(guardada);
           else if (guardada?.tipo === 'sesion') elegir(guardada);
         } catch {}
@@ -105,6 +106,7 @@ function recibir(m: ServidorMensaje) {
       break;
     }
     case 'historial': estado.historial = m.sesiones; break;
+    case 'catalogo': estado.catalogo = m.proveedores; break;
     case 'comandos': estado.comandos.set(m.agente, m.comandos); break;
     case 'carpeta': estado.carpeta = { ruta: m.ruta, vez: estado.carpeta.vez + 1 }; break;
     case 'error': mostrarError(m.texto); break;

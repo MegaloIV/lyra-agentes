@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { createContext } from 'preact';
+import { useContext, useEffect, useMemo, useState } from 'preact/hooks';
 import hljs from 'highlight.js/lib/common';
 import type { Bloque, Detalle, Solicitud } from '@protocolo';
 import { detalleHerramienta } from '../../servidor/resumenes.ts';
@@ -10,6 +11,8 @@ import { contarAcciones, duracion, hora, lenguajeDe, textoPlano, type Herr } fro
 type Usuario = Extract<Bloque, { tipo: 'usuario' }>;
 type Turno = { id: string; usuario?: Usuario; cuerpo: Bloque[] };
 type Hijos = Map<string, Bloque[]>;
+/** Quién trabaja en el documento: Claude, Codex o Gemini */
+const Quien = createContext('Claude');
 
 /** Separa los bloques en turnos (uno por mensaje del usuario) y aparta el trabajo de los subagentes */
 export function armarTurnos(bloques: Bloque[]): { turnos: Turno[]; hijos: Hijos } {
@@ -124,25 +127,26 @@ function responder(s: Solicitud, decision: 'permitir' | 'siempre' | 'rechazar', 
   enviar({ t: 'responder', agente: s.agente, solicitud: s.id, decision, mensaje: mensaje || undefined, respuestas });
 }
 
-function tituloPermiso(s: Solicitud): string {
+function tituloPermiso(s: Solicitud, quien: string): string {
   switch (s.herramienta) {
-    case 'Bash': return 'Claude quiere ejecutar un comando';
-    case 'Edit': case 'MultiEdit': case 'NotebookEdit': return 'Claude quiere editar un archivo';
-    case 'Write': return 'Claude quiere escribir un archivo';
-    case 'Read': return 'Claude quiere leer un archivo';
-    case 'WebFetch': return 'Claude quiere abrir una página web';
-    case 'WebSearch': return 'Claude quiere buscar en la web';
-    case 'Agent': case 'Task': return 'Claude quiere lanzar un subagente';
-    default: return s.titulo || `Claude quiere usar ${s.nombreCorto || s.herramienta}`;
+    case 'Bash': return `${quien} quiere ejecutar un comando`;
+    case 'Edit': case 'MultiEdit': case 'NotebookEdit': return `${quien} quiere editar un archivo`;
+    case 'Write': return `${quien} quiere escribir un archivo`;
+    case 'Read': return `${quien} quiere leer un archivo`;
+    case 'WebFetch': return `${quien} quiere abrir una página web`;
+    case 'WebSearch': return `${quien} quiere buscar en la web`;
+    case 'Agent': case 'Task': return `${quien} quiere lanzar un subagente`;
+    default: return s.titulo || `${quien} quiere usar ${s.nombreCorto || s.herramienta}`;
   }
 }
 
 const RESUELTO: Record<string, string> = { permitido: 'Permitido', rechazado: 'Rechazado', cancelado: 'Cancelado', respondida: 'Respondida', cancelada: 'Sin responder', aprobado: 'Plan aprobado' };
 
 function TarjetaPermiso({ b, cwd }: { b: Extract<Bloque, { tipo: 'permiso' }>; cwd: string }) {
-  const listo = useListo(), [mensaje, setMensaje] = useState('');
+  const listo = useListo(), [mensaje, setMensaje] = useState(''), quien = useContext(Quien);
   const s = b.solicitud, e = s.entrada;
   const cuerpo = useMemo((): Detalle => {
+    if (s.detalle) return s.detalle;
     if (['Edit', 'MultiEdit', 'Write', 'Bash'].includes(s.herramienta)) return detalleHerramienta(s.herramienta, e);
     if (s.herramienta === 'WebFetch' || s.herramienta === 'WebSearch') return { clase: 'codigo', texto: String(e.url || e.query || '') };
     return { clase: 'codigo', lenguaje: 'json', texto: JSON.stringify(e, null, 2) };
@@ -151,7 +155,7 @@ function TarjetaPermiso({ b, cwd }: { b: Extract<Bloque, { tipo: 'permiso' }>; c
   const motivo = [typeof e.description === 'string' && s.herramienta === 'Bash' ? e.description : '', ['Edit', 'MultiEdit', 'Write', 'Read'].includes(s.herramienta) ? '' : s.descripcion, s.motivo, s.rutaBloqueada ? `Ruta: ${s.rutaBloqueada}` : ''].filter(m => m && !genericos.test(m.trim()));
   return (
     <div class="tarjeta tarjeta-permiso" data-estado={b.estado}>
-      <div class="tarjeta-titulo">{tituloPermiso(s)}</div>
+      <div class="tarjeta-titulo">{tituloPermiso(s, quien)}</div>
       <div class="tarjeta-cuerpo">
         <VerDetalle d={cuerpo} cwd={cwd} />
         {[...new Set(motivo)].map(m => <p class="tarjeta-motivo">{m}</p>)}
@@ -159,7 +163,7 @@ function TarjetaPermiso({ b, cwd }: { b: Extract<Bloque, { tipo: 'permiso' }>; c
       {b.estado === 'pendiente' ? (
         <div class="tarjeta-acciones">
           <button class="boton boton-primario" disabled={!listo} onClick={() => responder(s, 'permitir')}>Permitir</button>
-          {s.haySugerencias && <button class="boton" disabled={!listo} onClick={() => responder(s, 'siempre')}>Permitir siempre</button>}
+          {s.haySugerencias && <button class="boton" disabled={!listo} onClick={() => responder(s, 'siempre')}>{s.etiquetaSiempre || 'Permitir siempre'}</button>}
           <button class="boton boton-peligro" disabled={!listo} onClick={() => responder(s, 'rechazar', mensaje)}>Rechazar</button>
           <input class="tarjeta-mensaje" placeholder="Motivo o indicación (opcional)" value={mensaje} onInput={ev => setMensaje((ev.currentTarget as HTMLInputElement).value)} />
         </div>
@@ -171,7 +175,7 @@ function TarjetaPermiso({ b, cwd }: { b: Extract<Bloque, { tipo: 'permiso' }>; c
 type Pregunta = { question: string; header?: string; multiSelect?: boolean; options?: { label: string; description?: string }[] };
 
 function TarjetaPregunta({ b }: { b: Extract<Bloque, { tipo: 'pregunta' }> }) {
-  const listo = useListo();
+  const listo = useListo(), quien = useContext(Quien);
   const preguntas = (Array.isArray(b.solicitud.entrada.questions) ? b.solicitud.entrada.questions : []) as Pregunta[];
   const [elegidas, setElegidas] = useState<Record<string, string[]>>({});
   const [otras, setOtras] = useState<Record<string, string>>({});
@@ -184,7 +188,7 @@ function TarjetaPregunta({ b }: { b: Extract<Bloque, { tipo: 'pregunta' }> }) {
   const pendiente = b.estado === 'pendiente';
   return (
     <div class="tarjeta tarjeta-pregunta" data-estado={b.estado}>
-      <div class="tarjeta-titulo">{preguntas.length > 1 ? 'Claude te hace unas preguntas' : 'Claude te hace una pregunta'}</div>
+      <div class="tarjeta-titulo">{preguntas.length > 1 ? `${quien} te hace unas preguntas` : `${quien} te hace una pregunta`}</div>
       <div class="tarjeta-cuerpo">
         {preguntas.map(p => (
           <fieldset class="pregunta" disabled={!pendiente}>
@@ -213,10 +217,10 @@ function TarjetaPregunta({ b }: { b: Extract<Bloque, { tipo: 'pregunta' }> }) {
 }
 
 function TarjetaPlan({ b }: { b: Extract<Bloque, { tipo: 'plan' }> }) {
-  const listo = useListo(), [mensaje, setMensaje] = useState('');
+  const listo = useListo(), [mensaje, setMensaje] = useState(''), quien = useContext(Quien);
   return (
     <div class="tarjeta tarjeta-plan" data-estado={b.estado}>
-      <div class="tarjeta-titulo">Claude propone un plan</div>
+      <div class="tarjeta-titulo">{quien} propone un plan</div>
       <Md texto={b.md} />
       {b.estado === 'pendiente' ? (
         <div class="tarjeta-acciones">
@@ -264,9 +268,9 @@ function Cuerpo({ bloques, hijos, cwd }: { bloques: Bloque[]; hijos: Hijos; cwd:
   return <>{salida}</>;
 }
 
-export function Turnos({ turnos, hijos, cwd }: { turnos: Turno[]; hijos: Hijos; cwd: string }) {
+export function Turnos({ turnos, hijos, cwd, quien }: { turnos: Turno[]; hijos: Hijos; cwd: string; quien: string }) {
   return (
-    <>
+    <Quien.Provider value={quien}>
       {turnos.map(t => (
         <article key={t.id} class="turno" id={`turno-${t.id}`}>
           {t.usuario && (
@@ -278,6 +282,6 @@ export function Turnos({ turnos, hijos, cwd }: { turnos: Turno[]; hijos: Hijos; 
           <div class="turno-cuerpo"><Cuerpo bloques={t.cuerpo} hijos={hijos} cwd={cwd} /></div>
         </article>
       ))}
-    </>
+    </Quien.Provider>
   );
 }

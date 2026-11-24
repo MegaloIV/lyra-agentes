@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ResumenAgente } from '@protocolo';
 import { estado, enviar, crearAgente, type Vista } from '../tienda.ts';
+import { nombreProveedor } from '../util.ts';
 
 const borradores = new Map<string, string>();
 const clave = (v: Vista) => v?.tipo === 'agente' ? v.id : v?.tipo === 'sesion' ? v.sessionId : '';
@@ -27,8 +28,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   }, [texto]);
   useEffect(() => {
     const enfocar = () => caja.current?.focus();
-    window.addEventListener('atril-enfocar', enfocar);
-    return () => window.removeEventListener('atril-enfocar', enfocar);
+    window.addEventListener('lyra-enfocar', enfocar);
+    return () => window.removeEventListener('lyra-enfocar', enfocar);
   }, []);
 
   const trabajando = agente?.estado === 'trabajando' || agente?.estado === 'esperando';
@@ -40,8 +41,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   function mandar() {
     const t = texto.trim();
     if (!t) return;
-    if (vista?.tipo === 'sesion') crearAgente({ t: 'reanudar', sessionId: vista.sessionId, cwd: vista.cwd, texto: t });
-    else if (agente?.estado === 'error' && agente.sessionId) crearAgente({ t: 'reanudar', sessionId: agente.sessionId, cwd: agente.cwd, texto: t });
+    if (vista?.tipo === 'sesion') crearAgente({ t: 'reanudar', sessionId: vista.sessionId, cwd: vista.cwd, proveedor: vista.proveedor, texto: t });
+    else if (agente?.estado === 'error' && agente.sessionId) crearAgente({ t: 'reanudar', sessionId: agente.sessionId, cwd: agente.cwd, proveedor: agente.proveedor, texto: t });
     else if (agente) enviar({ t: 'enviar', agente: agente.id, texto: t });
     else return;
     setTexto(''); borradores.delete(k);
@@ -89,12 +90,12 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
       )}
       <div class="redactor-caja">
         <textarea ref={caja} class="redactor-texto" rows={1} value={texto}
-          placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : 'Escribe a Claude…  (Enter envía · Shift+Enter nueva línea)'}
+          placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : `Escribe a ${nombreProveedor(agente?.proveedor)}…  (Enter envía · Shift+Enter nueva línea)`}
           onInput={e => { setTexto((e.currentTarget as HTMLTextAreaElement).value); setPopupCerrado(false); setElegido(0); }}
           onKeyDown={tecla} />
         <div class="redactor-barra">
           <span class="redactor-estado">{textoEstado}</span>
-          {agente?.estado === 'error' && agente.sessionId && <button class="boton" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd })}>Reanudar</button>}
+          {agente?.estado === 'error' && agente.sessionId && <button class="boton" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd, proveedor: agente.proveedor })}>Reanudar</button>}
           <button class="boton-detener" hidden={!trabajando} onClick={() => agente && enviar({ t: 'interrumpir', agente: agente.id })}>Detener</button>
           <button class="boton-enviar" disabled={!texto.trim()} onClick={mandar}>{trabajando ? 'Poner en cola' : 'Enviar'}</button>
         </div>

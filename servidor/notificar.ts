@@ -5,6 +5,7 @@ export function crearNotificador(visible: () => boolean) {
     const ahora = Date.now();
     if (visible() || ahora - (ultimas.get(id) ?? -Infinity) < 5000) return;
     ultimas.set(id, ahora);
-    execFile('notify-send', ['-a', 'Atril', '-u', 'normal', '--', titulo, texto], () => {});
+    // «Agentes» y no «Lyra»: Lyra cuenta las notificaciones del escritorio salvo las suyas
+    execFile('notify-send', ['-a', 'Agentes', '-i', 'lyra-agentes', '-u', 'normal', '--', titulo, texto], () => {});
   };
 }
