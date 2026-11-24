@@ -7,6 +7,7 @@ import { BotonIcono, TituloEditable } from './componentes/Acciones.tsx';
 import { Barra } from './componentes/Barra.tsx';
 import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Documento.tsx';
 import { Redactor } from './componentes/Redactor.tsx';
+import { Reloj } from './componentes/Reloj.tsx';
 import { Visor, archivosDe } from './componentes/Visor.tsx';
 import type { Bloque } from '@protocolo';
 import { aMarkdown, haceCuanto, nombreProveedor, rutaCorta } from './util.ts';
@@ -223,6 +224,7 @@ function App() {
                 </div>
               )}
               {v && botonesPanel}
+              {v && <Reloj />}
             </header>
             {!estado.conectado && <div class="desconectado">Sin conexión con el servidor… reintentando</div>}
             {v ? (doc ? (
@@ -230,7 +232,10 @@ function App() {
                 onEntradas={(lista, activo) => setEntradas(prev => prev.lista === lista && prev.activo === activo ? prev : { lista, activo })} />
             ) : <div class="vacio"><p>Cargando la conversación…</p></div>) : (
               <div class="documento nuevo">
-                <div class="marca-grande" aria-hidden="true">LYRA</div>
+                <div class="portada">
+                  <div class="marca-grande" aria-hidden="true">LYRA</div>
+                  <Reloj grande />
+                </div>
               </div>
             )}
             <Redactor vista={v} agente={agente} />

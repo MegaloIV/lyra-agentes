@@ -998,3 +998,14 @@ html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra));
 .orden > button { flex: 1; padding: .2rem .3rem; border: 0; border-radius: calc(var(--radio-chico) - 2px); background: none; color: var(--tenue); font-size: .74rem; }
 .orden > button:hover { color: var(--texto); }
 .orden > button[aria-pressed="true"] { background: var(--superficie); color: var(--texto-fuerte); }
+
+/* Reloj: debajo de LYRA en el inicio y a un lado de la cabecera en una conversación */
+.portada { display: flex; flex-direction: column; align-items: center; gap: 1.1rem; }
+.reloj { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; white-space: nowrap; user-select: none; font-variant-numeric: tabular-nums; }
+.reloj-hora { font-size: .95rem; font-weight: 600; color: var(--texto-fuerte); }
+.reloj-fecha { font-size: .74rem; color: var(--tenue); }
+.lectura-cabecera > .reloj { padding-left: .7rem; margin-left: .1rem; border-left: 1px solid var(--borde); }
+.reloj-grande { align-items: center; gap: .3rem; }
+.reloj-grande .reloj-hora { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 300; letter-spacing: .06em; opacity: .75; }
+.reloj-grande .reloj-fecha { font-size: clamp(.9rem, 1.6vw, 1.1rem); letter-spacing: .04em; }
+@media (max-width: 760px) { .lectura-cabecera > .reloj .reloj-fecha { display: none; } }
