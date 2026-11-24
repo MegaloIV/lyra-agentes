@@ -1,6 +1,6 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Proveedor, Grupos, PermissionMode } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
 /** `null`: un agente nuevo, todavía sin crear (se crea al mandar el primer mensaje) */
@@ -20,6 +20,9 @@ export const estado = {
   documentos: new Map<string, Documento>(),
   historial: [] as Sesion[],
   catalogo: [] as InfoProveedor[],
+  /** Límites de uso de cada proveedor (abajo en la barra); `pidiendoLimites`: desde cuándo se están pidiendo */
+  limites: null as { limites: Limite[]; fecha: number } | null,
+  pidiendoLimites: 0,
   comandos: new Map<string, Comando[]>(),
   vista: null as Vista,
   errores: [] as { id: number; texto: string; nivel: 'error' | 'info' }[],
@@ -199,6 +202,7 @@ function recibir(m: ServidorMensaje) {
     }
     case 'historial': estado.historial = m.sesiones; break;
     case 'catalogo': estado.catalogo = m.proveedores; break;
+    case 'limites': estado.limites = { limites: m.limites, fecha: m.fecha }; estado.pidiendoLimites = 0; break;
     case 'comandos': estado.comandos.set(m.agente, m.comandos); break;
     case 'carpeta': estado.carpeta = { ruta: m.ruta, vez: estado.carpeta.vez + 1 }; break;
     case 'error': mostrarError(m.texto); break;
@@ -220,7 +224,7 @@ function conectar() {
   if (!token) { estado.rechazado = true; avisar(); return; }
   const s = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?t=${encodeURIComponent(token)}`);
   ws = s;
-  s.onopen = () => { estado.conectado = true; espera = 1000; s.send(JSON.stringify({ t: 'hola' })); avisarFoco(); avisar(); };
+  s.onopen = () => { estado.conectado = true; espera = 1000; s.send(JSON.stringify({ t: 'hola' })); pedirLimites(); avisarFoco(); avisar(); };
   s.onmessage = e => { try { recibir(JSON.parse(String(e.data)) as ServidorMensaje); } catch {} };
   s.onclose = e => {
     estado.conectado = false; ws = null;
@@ -233,6 +237,16 @@ function conectar() {
 function avisarFoco() {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'foco', visible: document.visibilityState === 'visible' && document.hasFocus() }));
 }
+/** Los límites se piden al abrir, cada 5 min con la ventana a la vista y al volver a ella si pasaron 2 min */
+export function pedirLimites(fresco = false) {
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  estado.pidiendoLimites = Date.now(); avisar();
+  ws.send(JSON.stringify({ t: 'limites', fresco }));
+}
+const limitesViejos = (ms: number) => Date.now() - estado.pidiendoLimites > 60_000 && (!estado.limites || Date.now() - estado.limites.fecha > ms);
+setInterval(() => { if (document.visibilityState === 'visible' && limitesViejos(5 * 60_000)) pedirLimites(); }, 60_000);
+window.addEventListener('focus', () => { if (limitesViejos(2 * 60_000)) pedirLimites(); });
+
 // El servidor considera «visible» solo si lo oyó hace menos de 2 s: latido cada segundo
 setInterval(avisarFoco, 1000);
 for (const ev of ['visibilitychange', 'focus', 'blur']) (ev === 'visibilitychange' ? document : window).addEventListener(ev, () => {

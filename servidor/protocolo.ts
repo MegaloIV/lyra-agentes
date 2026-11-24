@@ -23,6 +23,10 @@ export type Modelo = { valor: string | null; nombre: string; descripcion?: strin
 /** Lo que se puede elegir de cada proveedor. `cuota`: cuánto queda (Codex) */
 export type InfoProveedor = { id: Proveedor; nombre: string; instalado: boolean; sesion: boolean; modelos: Modelo[]; modos: { valor: PermissionMode; nombre: string }[]; cuota?: { usado: number; renueva?: number; agotada: boolean } };
 export type Comando = { nombre: string; descripcion: string };
+/** Una ventana de un límite de uso: `usado` en %, `renueva` en ms. `corta` es la de horas (5 h) y `larga` la semanal */
+export type Ventana = { tipo: 'corta' | 'larga'; nombre: string; usado: number; renueva?: number };
+/** Cuánto le queda a cada proveedor; sin ventanas, `nota` dice por qué (sin sesión, no lo informa…) */
+export type Limite = { proveedor: Proveedor; plan?: string; ventanas: Ventana[]; nota?: string };
 /** Carpetas propias del usuario y en cuál está cada sesión (`sessionId` → id de carpeta) */
 export type Grupos = { carpetas: { id: string; nombre: string; abierta: boolean }[]; sesiones: Record<string, string> };
 export type ClienteMensaje =
@@ -35,6 +39,8 @@ export type ClienteMensaje =
   | { t: 'modelo'; agente: string; modelo: string | null }
   | { t: 'esfuerzo'; agente: string; esfuerzo: string | null }
   | { t: 'catalogo' }
+  /** Los límites de uso; `fresco` los vuelve a pedir aunque haya unos recientes */
+  | { t: 'limites'; fresco?: boolean }
   | { t: 'abrir'; con: 'terminal' | 'carpeta' | 'loginGemini'; cwd?: string }
   /** Abre un archivo con su app (`ruta` relativa a `cwd`) */
   | { t: 'abrirArchivo'; ruta: string; cwd?: string; app?: string }
@@ -57,6 +63,7 @@ export type ServidorMensaje =
   | { t: 'comandos'; agente: string; comandos: Comando[] }
   | { t: 'carpeta'; ruta: string | null }
   | { t: 'catalogo'; proveedores: InfoProveedor[] }
+  | { t: 'limites'; limites: Limite[]; fecha: number }
   | { t: 'error'; texto: string }
   | { t: 'aviso'; texto: string }
   | { t: 'borrada'; sessionId?: string; agente?: string }

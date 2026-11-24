@@ -97,6 +97,32 @@ button { cursor: pointer; }
 }
 .boton-nuevo:hover { background: rgba(184, 224, 74, .2); }
 
+/* Límites de uso, abajo: una fila por proveedor con la ventana de 5 h y la semanal */
+.limites {
+  flex: none; border-top: 1px solid var(--borde);
+  margin: 0 -.5rem; padding: .45rem 1rem .65rem;
+  font-size: .74rem; color: var(--apagado);
+}
+.limites-fila { display: grid; grid-template-columns: 3.4rem 1fr 1fr; gap: .6rem; align-items: center; min-height: 1.3rem; }
+.limites-cabecera { color: var(--tenue); font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; min-height: 1.4rem; }
+.limites-titulo {
+  all: unset; cursor: pointer; font: inherit; color: inherit; letter-spacing: inherit;
+  border-radius: 4px; margin-left: -.25rem; padding: 0 .25rem;
+}
+.limites-titulo:hover:not(:disabled) { color: var(--texto); }
+.limites-titulo:disabled { cursor: default; }
+.limites-titulo:focus-visible { outline: 2px solid var(--lima); }
+.limites-nombre { color: var(--prov); font-weight: 500; }
+.limites-nota { grid-column: 2 / -1; color: var(--tenue); font-style: italic; }
+.limites-celda { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.limites-barra { flex: 1; min-width: 1.5rem; height: 4px; border-radius: 2px; background: var(--borde); overflow: hidden; }
+.limites-barra i { display: block; height: 100%; border-radius: 2px; background: var(--prov); }
+.limites-pct { flex: none; min-width: 2.4rem; text-align: right; font-variant-numeric: tabular-nums; }
+.limites-celda[data-nivel="alto"] .limites-barra i { background: var(--amarillo); }
+.limites-celda[data-nivel="alto"] .limites-pct { color: var(--amarillo); }
+.limites-celda[data-nivel="agotado"] .limites-barra i { background: var(--rojo); }
+.limites-celda[data-nivel="agotado"] .limites-pct { color: var(--rojo); }
+
 .grupo { margin-top: .6rem; }
 .grupo-titulo {
   margin: 0; padding: .3rem .5rem;

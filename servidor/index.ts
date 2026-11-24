@@ -14,7 +14,9 @@ import { catalogo } from './catalogo.ts';
 import { abrirCon, abrirArchivo, aplicaciones } from './abrir.ts';
 import { leerArchivo, comoPdf, servirMedio } from './archivos.ts';
 import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
-import { avisarCuota, cerrarCodex } from './codex.ts';
+import { avisarCuota, cerrarCodex, limiteCodex } from './codex.ts';
+import { avisarUsoClaude } from './claude.ts';
+import { anotarLimite, limites, listaLimites } from './limites.ts';
 // Si el servidor se lanzó desde una sesión de Claude Code, sus agentes heredarían estas variables y se
 // creerían sesiones hijas (no se guardan ni se pueden retomar).
 for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_AGENT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete process.env[k];
@@ -33,7 +35,10 @@ const alAbrir = (id: string) => {
 };
 const gestor = new GestorAgentes(emitir, crearNotificador(visible, alAbrir), id => [...clientes.values()].some(c => c.agente === id && c.visible && Date.now() - c.fecha < 2000));
 const mandarCatalogo = async (fresco = false) => emitir({ t: 'catalogo', proveedores: await catalogo(fresco) });
-avisarCuota(() => void mandarCatalogo(true).catch(() => {}));
+// Codex avisa solo cuando cambia su cuota; Claude, al terminar cada turno
+const nuevoLimite = (l?: ReturnType<typeof limiteCodex>) => { if (l) { anotarLimite(l); emitir({ t: 'limites', ...listaLimites() }); } };
+avisarCuota(() => { void mandarCatalogo(true).catch(() => {}); nuevoLimite(limiteCodex()); });
+avisarUsoClaude(nuevoLimite);
 void catalogo().catch(() => {});   // se arma al arrancar para que el diálogo lo tenga listo
 const servidor = createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -95,6 +100,7 @@ servidor.on('upgrade', (req, socket, head) => {
           case 'esfuerzo': { const a = gestor.obtener(m.agente); await a.motor.esfuerzo(m.esfuerzo ?? undefined); gestor.barra(); break; }
           case 'comandos': emitir({ t: 'comandos', agente: m.agente, comandos: await gestor.obtener(m.agente).motor.comandos() }); break;
           case 'catalogo': enviar(ws, { t: 'catalogo', proveedores: await catalogo(true) }); break;
+          case 'limites': emitir({ t: 'limites', ...await limites(m.fresco) }); break;
           case 'abrir': await abrirCon(m.con, m.cwd); break;
           case 'abrirArchivo': await abrirArchivo(m.ruta, m.cwd, m.app); break;
           case 'aplicaciones': enviar(ws, { t: 'aplicaciones', ruta: m.ruta, apps: await aplicaciones(m.ruta, m.cwd) }); break;

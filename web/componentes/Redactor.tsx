@@ -5,7 +5,7 @@ import type { PermissionMode, Proveedor, ResumenAgente } from '@protocolo';
 import { estado, enviar, crearAgente, cambiarBorrador, type Vista } from '../tienda.ts';
 import { Desplegable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
-import { PROVEEDORES, info, miles, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
+import { PROVEEDORES, horaDe, info, miles, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
 
 const borradores = new Map<string, string>();
 const clave = (v: Vista) => v?.tipo === 'agente' ? v.id : v?.tipo === 'sesion' ? v.sessionId : 'nuevo';
@@ -15,11 +15,6 @@ const TEXTO_ESTADO: Record<string, string> = {
   error: 'Se detuvo por un error', listo: '', cerrado: '',
 };
 
-function horaDe(ms: number) {
-  const d = new Date(ms), hoy = new Date();
-  const h = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === hoy.toDateString() ? `a las ${h}` : `el ${d.toLocaleDateString('es', { weekday: 'long', day: 'numeric' })} a las ${h}`;
-}
 
 /** Un chip que abre una lista corta hacia arriba */
 function Chip({ id, abierto, setAbierto, texto, titulo, datos, children }: { id: string; abierto: string; setAbierto: (v: string) => void; texto: preact.ComponentChildren; titulo: string; datos?: Record<string, string | undefined>; children?: preact.ComponentChildren }) {

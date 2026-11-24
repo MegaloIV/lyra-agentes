@@ -8,6 +8,7 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
   let valido = false;
   switch (m.t) {
     case 'hola': case 'historial': case 'elegirCarpeta': case 'catalogo': valido = true; break;
+    case 'limites': valido = m.fresco === undefined || typeof m.fresco === 'boolean'; break;
     case 'foco': valido = typeof m.visible === 'boolean'; break;
     case 'crear': valido = texto('cwd') && !!m.cwd && texto('modelo', true) && texto('esfuerzo', true) && texto('prompt', true) && proveedorValido(m.proveedor) && (m.modo === undefined || modos.includes(m.modo as PermissionMode)); break;
     case 'abrirSesion': case 'reanudar': valido = texto('sessionId') && !!m.sessionId && texto('cwd') && !!m.cwd && texto('texto', true) && proveedorValido(m.proveedor); break;

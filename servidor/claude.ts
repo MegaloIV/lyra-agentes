@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { query, listSessions, getSessionMessages, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Query, SDKUserMessage, CanUseTool, PermissionResult, EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import type { AskUserQuestionInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
-import type { Bloque, Comando, Modelo, PermissionMode, Sesion, Solicitud } from './protocolo.ts';
+import type { Bloque, Comando, Limite, Modelo, PermissionMode, Sesion, Solicitud, Ventana } from './protocolo.ts';
 import { aplicarOps } from './protocolo.ts';
 import { crearNormalizador } from './normalizar.ts';
 import { Cola } from './cola.ts';
@@ -36,6 +36,31 @@ export async function modelosClaude(): Promise<Modelo[]> {
     return lista.map(m => ({ valor: m.value === 'default' ? null : m.value, nombre: m.value === 'default' ? 'Predeterminado' : m.displayName, descripcion: m.description, esfuerzos: m.supportsEffort ? m.supportedEffortLevels : undefined }));
   } finally { vacia.cerrar(); q.close(); }
 }
+
+/** Los límites del plan de claude.ai (los mismos de /usage), de la API experimental del SDK */
+type Uso = Awaited<ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>>;
+const usoDe = (q: Query) => Promise.race([q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }), new Promise<never>((_, mal) => setTimeout(() => mal(new Error('tiempo')), 20000))]);
+function limiteDe(u: Uso): Limite {
+  const plan = u.subscription_type ? u.subscription_type[0]!.toUpperCase() + u.subscription_type.slice(1) : undefined;
+  const r = u.rate_limits;
+  if (!u.rate_limits_available || !r) return { proveedor: 'claude', plan, ventanas: [], nota: 'sin límites de plan' };
+  const ventana = (tipo: Ventana['tipo'], nombre: string, v?: { utilization: number | null; resets_at: string | null } | null): Ventana[] =>
+    v && typeof v.utilization === 'number' ? [{ tipo, nombre, usado: Math.round(v.utilization), renueva: v.resets_at ? Date.parse(v.resets_at) || undefined : undefined }] : [];
+  return { proveedor: 'claude', plan, ventanas: [
+    ...ventana('corta', '5 h', r.five_hour), ...ventana('larga', 'Semana', r.seven_day),
+    ...ventana('larga', 'Opus (semana)', r.seven_day_opus), ...ventana('larga', 'Sonnet (semana)', r.seven_day_sonnet),
+    ...(r.model_scoped || []).flatMap(m => ventana('larga', `${m.display_name} (semana)`, m)),
+  ] };
+}
+/** Sin un agente abierto se le preguntan a una consulta vacía (no gasta nada) */
+export async function limitesClaude(): Promise<Limite> {
+  const vacia = new Cola<SDKUserMessage>();
+  const q = query({ prompt: vacia, options: { pathToClaudeCodeExecutable: EJECUTABLE, settingSources: ['user'], env: { ...process.env } } });
+  try { return limiteDe(await usoDe(q)); } finally { vacia.cerrar(); q.close(); }
+}
+/** Al terminar cada turno de Claude (no local) se leen de su misma consulta y se avisan */
+let alUsarClaude: (l: Limite) => void = () => {};
+export function avisarUsoClaude(f: (l: Limite) => void) { alUsarClaude = f; }
 
 export class MotorClaude implements Motor {
   private consulta?: Query;
@@ -100,6 +125,7 @@ export class MotorClaude implements Motor {
           // Título que Claude Code genera para la sesión (el mismo del historial)
           if (a.sessionId) void getSessionInfo(a.sessionId, { dir: a.cwd }).then(info => { const t = info?.customTitle || info?.summary; if (t && t !== a.titulo && t !== info?.firstPrompt) { a.titulo = t.slice(0, 80); ctx.barra(); } }).catch(() => {});
           if (typeof consulta.getContextUsage === 'function') void consulta.getContextUsage({ detail: 'summary' }).then(c => { if (!a.cerrado && this.consulta === consulta) { a.contexto = { usados: c.totalTokens, total: c.rawMaxTokens }; ctx.barra(); } }).catch(() => {});
+          if (!this.local && typeof consulta.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET === 'function') void usoDe(consulta).then(u => alUsarClaude(limiteDe(u))).catch(() => {});
         }
       }
       if (!a.cerrado && this.consulta === consulta) ctx.fallo(a, new Error(`El proceso de ${this.local ? 'el agente local' : 'Claude'} terminó. Puedes reanudar la sesión.`));

@@ -1,5 +1,5 @@
 // Codex por `codex app-server` (JSON-RPC v2 por stdio). Un solo proceso atiende a todos los hilos.
-import type { Bloque, Comando, InfoProveedor, Modelo, PermissionMode, Sesion, Solicitud } from './protocolo.ts';
+import type { Bloque, Comando, InfoProveedor, Limite, Modelo, PermissionMode, Sesion, Solicitud, Ventana } from './protocolo.ts';
 import { ClienteRpc } from './rpc.ts';
 import { cadena, objeto } from './resumenes.ts';
 import { bloquesDeItem, bloquesDeHilo, comandoLimpio, finDeTurno, lineasDiff, tareasDePlan } from './normalizarCodex.ts';
@@ -26,13 +26,21 @@ const politica = (m: PermissionMode) => POLITICA[m] || POLITICA.default!;
 // ── La conexión compartida ────────────────────────────────────────────────────
 let cliente: ClienteRpc | null = null, conectando: Promise<ClienteRpc> | null = null;
 const hilos = new Map<string, MotorCodex>();
-let cuota: InfoProveedor['cuota'];
+let cuota: InfoProveedor['cuota'], limite: Limite | undefined;
 export let alCambiarCuota: () => void = () => {};
 export function avisarCuota(f: () => void) { alCambiarCuota = f; }
+/** La última cuota leída, con sus dos ventanas (5 h y semana) */
+export const limiteCodex = () => limite;
 
+const duracion = (min: number) => min === 10080 ? 'Semana' : min === 1440 ? 'Día' : min > 1440 ? `${Math.round(min / 1440)} días` : min ? `${Math.round(min / 60)} h` : 'Límite';
 function leerCuota(r: P) {
   const vista = objeto(r.rateLimits ?? r), ventanas = [objeto(vista.primary), objeto(vista.secondary)].filter(v => typeof v.usedPercent === 'number');
   if (!ventanas.length) return;
+  const plan = cadena(vista.planType);
+  limite = { proveedor: 'codex', plan: plan ? plan[0]!.toUpperCase() + plan.slice(1) : limite?.plan, ventanas: ventanas.map((v): Ventana => {
+    const min = Number(v.windowDurationMins) || 0;
+    return { tipo: min > 1440 ? 'larga' : 'corta', nombre: duracion(min), usado: Math.round(v.usedPercent as number), renueva: typeof v.resetsAt === 'number' ? v.resetsAt * 1000 : undefined };
+  }) };
   const peor = ventanas.reduce((a, b) => (b.usedPercent as number) > (a.usedPercent as number) ? b : a);
   const agotada = (peor.usedPercent as number) >= 100 || r.ordinaryUsageAllowed === false || !!vista.rateLimitReachedType;
   cuota = { usado: Math.round(peor.usedPercent as number), renueva: typeof peor.resetsAt === 'number' ? peor.resetsAt * 1000 : undefined, agotada };
@@ -82,6 +90,14 @@ export async function infoCodex(): Promise<InfoProveedor> {
     base.cuota = cuota;
   } catch { /* sin conexión: se ofrece igual, el error saldrá al crear */ }
   return base;
+}
+
+/** Vuelve a leer la cuota (sin Codex instalado o sin cuenta, no hay) */
+export async function limitesCodex(): Promise<Limite | undefined> {
+  if (!instalado('codex')) return undefined;
+  const c = await conexion();
+  leerCuota(await c.pedir<P>('account/rateLimits/read', {}));
+  return limite ?? { proveedor: 'codex', ventanas: [], nota: 'sin sesión' };
 }
 
 export async function historialCodex(): Promise<Sesion[]> {

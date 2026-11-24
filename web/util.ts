@@ -13,6 +13,13 @@ export function nombreCarpeta(ruta: string): string {
   return partes.at(-1) || ruta || '/';
 }
 
+/** «a las 19:09» hoy; «el sábado 30 a las 20:59» otro día */
+export function horaDe(ms: number) {
+  const d = new Date(ms), hoy = new Date();
+  const h = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === hoy.toDateString() ? `a las ${h}` : `el ${d.toLocaleDateString('es', { weekday: 'long', day: 'numeric' })} a las ${h}`;
+}
+
 export function haceCuanto(fecha: number): string {
   const s = Math.max(0, (Date.now() - fecha) / 1000);
   if (s < 45) return 'ahora';

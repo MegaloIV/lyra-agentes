@@ -4,6 +4,7 @@
 #      lyra-agentes --cerrar    cierra la ventana (el servidor y los agentes siguen)
 #      lyra-agentes --detener   detiene el servidor (cierra los agentes que estén corriendo)
 #      lyra-agentes --log       muestra el registro del servidor
+#      lyra-agentes --instalar  la agrega al menú de aplicaciones (rofi, wofi, el lanzador del escritorio)
 set -euo pipefail
 DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
 ESTADO="$HOME/.local/state/lyra-agentes"
@@ -30,6 +31,26 @@ case "${1:-}" in
     rm -f "$ESTADO/servidor.pid"; exit 0 ;;
   --cerrar) p=$(ventana); [[ -n "$p" ]] && kill $p; exit 0 ;;
   --log) exec less +G "$ESTADO/servidor.log" ;;
+  --instalar)
+    DATOS="${XDG_DATA_HOME:-$HOME/.local/share}"
+    mkdir -p "$DATOS/applications" "$DATOS/icons/hicolor/scalable/apps"
+    cp "$DIR/web/public/lyra-agentes.svg" "$DATOS/icons/hicolor/scalable/apps/lyra-agentes.svg"
+    # Exec con la ruta completa: funciona aunque ~/.local/bin no esté en el PATH del lanzador
+    cat > "$DATOS/applications/io.lyra.Agentes.desktop" <<FIN
+[Desktop Entry]
+Type=Application
+Name=Lyra
+GenericName=Agentes de programación
+Comment=Leer y manejar agentes de Claude, Codex, Gemini y Ollama como documentos
+Exec=$DIR/bin/lyra-agentes
+Icon=lyra-agentes
+Terminal=false
+StartupWMClass=io.lyra.Agentes
+Categories=Development;
+Keywords=claude;codex;gemini;ollama;agentes;ia;
+FIN
+    command -v update-desktop-database >/dev/null && update-desktop-database -q "$DATOS/applications" || true
+    echo "Listo: busca «Lyra» en el menú de aplicaciones."; exit 0 ;;
 esac
 
 if ! vivo; then

@@ -5,6 +5,7 @@ Una ventana para trabajar con varios agentes de programación a la vez —**Clau
 - **Conversaciones como documento:** el texto del agente en Markdown, las acciones (leer, editar, ejecutar) plegadas con su diff o su salida, y un índice para saltar entre tus mensajes.
 - **Varios agentes al mismo tiempo:** la barra de la izquierda muestra quién te necesita, quién trabaja y quién terminó. El historial de los cuatro proveedores se agrupa por la carpeta de cada proyecto, y además puedes crear tus propias carpetas.
 - **Sin diálogos:** el agente nuevo empieza al escribir. El proveedor, el modelo, el esfuerzo, los permisos y la carpeta son chips en la misma caja de texto, y se pueden cambiar en cualquier momento (Shift+Tab cambia los permisos, como en la terminal).
+- **Límites de uso a la vista:** abajo en la barra, cuánto usaste de Claude y de Codex (la ventana de 5 horas y la semanal), con la hora en que se renueva cada una. Se actualiza solo y al tocar «Uso».
 - **Permisos y preguntas en línea:** aprobar, rechazar con un motivo o responder sin salir del documento.
 - **Visor al costado:** muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas de cálculo, sin abrir otra app. «Abrir con…» ofrece las apps de tu escritorio que abren ese archivo.
 - **Ventana propia:** GTK4 + WebKitGTK (unos 300 MB), no un navegador. También se puede usar desde un navegador.
@@ -30,6 +31,7 @@ git clone https://github.com/MegaloIV/lyra-agentes.git
 cd lyra-agentes
 npm install
 ln -s "$PWD/bin/lyra-agentes" ~/.local/bin/lyra-agentes
+lyra-agentes --instalar   # la agrega al menú de aplicaciones, con su ícono
 ```
 
 Al abrirse por primera vez, el lanzador construye la interfaz y arranca el servidor.
@@ -41,7 +43,10 @@ lyra-agentes             # abre la ventana (y arranca el servidor si hace falta)
 lyra-agentes --cerrar    # cierra la ventana; el servidor y los agentes siguen
 lyra-agentes --detener   # detiene el servidor (cierra los agentes abiertos)
 lyra-agentes --log       # muestra el registro del servidor
+lyra-agentes --instalar  # la agrega al menú de aplicaciones
 ```
+
+**Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. Gemini CLI no informa su cuota a otras apps, así que su fila solo dice si tiene sesión. El agente local no tiene límites.
 
 Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor y Shift+Tab siguiente modo de permisos.
 

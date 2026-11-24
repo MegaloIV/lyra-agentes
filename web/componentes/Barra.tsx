@@ -7,6 +7,7 @@ import { estado, elegir, enviar, avisar, borrar, borrarVarias, cambiarBorrador, 
 import type { Objetivo } from '../tienda.ts';
 import { BotonIcono, Desplegable, Papelera, TituloEditable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
+import { Limites } from './Limites.tsx';
 import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from '../util.ts';
 
 const GRUPOS = [
@@ -199,6 +200,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
       )}
       {(q || filtro) && !agentes.length && !proyectos.length && ![...porCarpeta.values()].some(l => l.length) && <p class="historial-vacio">Nada coincide.</p>}
       </div>
+      <Limites />
     </aside>
   );
 }
