@@ -14,7 +14,7 @@ import { anotarLocal, entornoLocal, HERRAMIENTAS_LOCALES, asegurarOllama, modelo
 const EJECUTABLE = '/usr/bin/claude';
 
 export async function historialClaude(): Promise<Sesion[]> {
-  return (await listSessions({ limit: 200 })).map(s => ({ proveedor: 'claude' as const, sessionId: s.sessionId, titulo: s.customTitle || s.summary || s.firstPrompt?.slice(0, 60) || 'Sin título', cwd: s.cwd || '', modificado: s.lastModified, rama: s.gitBranch && s.gitBranch !== 'HEAD' ? s.gitBranch : undefined }));
+  return (await listSessions({ limit: 5000 })).map(s => ({ proveedor: 'claude' as const, sessionId: s.sessionId, titulo: s.customTitle || s.summary || s.firstPrompt?.slice(0, 60) || 'Sin título', cwd: s.cwd || '', modificado: s.lastModified, rama: s.gitBranch && s.gitBranch !== 'HEAD' ? s.gitBranch : undefined }));
 }
 
 export async function cargarClaude(sessionId: string, cwd: string) {

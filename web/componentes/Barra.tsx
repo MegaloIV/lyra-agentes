@@ -8,7 +8,7 @@ import type { Objetivo } from '../tienda.ts';
 import { BotonIcono, Desplegable, Papelera, TituloEditable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { Limites } from './Limites.tsx';
-import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta } from '../util.ts';
+import { PROVEEDORES, haceCuanto, nombreCarpeta, nombreProveedor, rutaCorta, tramoDe } from '../util.ts';
 
 const GRUPOS = [
   { clave: 'atencion', titulo: 'Te necesitan', estados: ['esperando', 'error'] },
@@ -19,6 +19,15 @@ const GRUPOS = [
 // Qué carpetas de proyecto abrió o cerró el usuario; las que no tocó: abiertas las 3 más recientes
 const PLEGADO = 'lyra-proyectos';
 const ABIERTAS_DE_ENTRADA = 3;
+
+// Cómo se agrupa el historial: por carpeta del proyecto, por día o por semana
+type Orden = 'carpeta' | 'dia' | 'semana';
+const ORDEN = 'lyra-orden';
+const ORDENES: { valor: Orden; nombre: string; titulo: string }[] = [
+  { valor: 'carpeta', nombre: 'Carpeta', titulo: 'Agrupar por carpeta del proyecto' },
+  { valor: 'dia', nombre: 'Día', titulo: 'Agrupar por día, de la más reciente' },
+  { valor: 'semana', nombre: 'Semana', titulo: 'Agrupar por semana, de la más reciente' },
+];
 
 /** Arrastrar una conversación a una carpeta */
 const ARRASTRE = 'application/x-lyra-sesion';
@@ -103,6 +112,8 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
   const [busqueda, setBusqueda] = useState('');
   const [plegado, setPlegado] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem(PLEGADO) || '{}'); } catch { return {}; } });
   const [marcado, setMarcado] = useState<string | null>(null);
+  const [orden, setOrden] = useState<Orden>(() => { try { const o = localStorage.getItem(ORDEN); return ORDENES.some(x => x.valor === o) ? o as Orden : 'carpeta'; } catch { return 'carpeta'; } });
+  const cambiarOrden = (o: Orden) => { setOrden(o); try { localStorage.setItem(ORDEN, o); } catch { /* sin almacenamiento */ } };
   const v = estado.vista;
   const q = busqueda.trim().toLowerCase();
   const pasa = (titulo: string, cwd: string, p: Proveedor) => (!filtro || p === filtro) && (!q || `${titulo} ${cwd}`.toLowerCase().includes(q));
@@ -112,11 +123,16 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
   const { carpetas, sesiones: enCarpeta } = estado.grupos;
   const porCarpeta = new Map<string, Sesion[]>(carpetas.map(c => [c.id, []]));
   const porProyecto = new Map<string, Sesion[]>();   // el historial ya viene del más reciente al más viejo
+  const titulos = new Map<string, string>();   // por día o semana: clave del tramo → su nombre
   for (const s of estado.historial) {
     if (abiertas.has(s.sessionId) || !pasa(s.titulo, s.cwd, s.proveedor)) continue;
     const c = enCarpeta[s.sessionId];
     if (c && porCarpeta.has(c)) porCarpeta.get(c)!.push(s);
-    else { const l = porProyecto.get(s.cwd); if (l) l.push(s); else porProyecto.set(s.cwd, [s]); }
+    else {
+      let clave = s.cwd;
+      if (orden !== 'carpeta') { const t = tramoDe(s.modificado, orden); clave = t.clave; titulos.set(clave, t.titulo); }
+      const l = porProyecto.get(clave); if (l) l.push(s); else porProyecto.set(clave, [s]);
+    }
   }
   const hay = new Set(estado.historial.map(s => s.proveedor));
   const proyectos = [...porProyecto.entries()];
@@ -138,6 +154,11 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
           <button type="button" key={p.id} class="buscador-proveedor" data-proveedor={p.id} aria-pressed={filtro === p.id} title={`Solo ${p.nombre}`} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}><span class="proveedor-punto" /></button>
         ))}
       </div>
+      {estado.historial.length > 0 && (
+        <div class="orden" role="group" aria-label="Agrupar el historial">
+          {ORDENES.map(o => <button type="button" key={o.valor} aria-pressed={orden === o.valor} title={o.titulo} onClick={() => cambiarOrden(o.valor)}>{o.nombre}</button>)}
+        </div>
+      )}
 
       {GRUPOS.map(g => {
         const lista = agentes.filter(a => (g.estados as readonly string[]).includes(a.estado));
@@ -177,6 +198,21 @@ export function Barra({ abierta, onNuevo, onCerrarCajon }: { abierta: boolean; o
         <section class="grupo" data-grupo="historial" {...soltable(null, marcado, setMarcado)}>
           {proyectos.map(([cwd, lista], i) => {
             const ab = abierto(cwd, i);
+            const titulo = titulos.get(cwd);
+            if (titulo) return (
+              <div key={cwd} class="tramo proyecto" data-abierto={String(ab)}>
+                <h3 class="grupo-titulo tramo-titulo proyecto-titulo">
+                  <button type="button" class="tramo-boton" aria-expanded={ab} onClick={() => alternar(cwd, i)}>
+                    <span class="carpeta-flecha" /><span class="proyecto-nombre">{titulo}</span> <span class="grupo-cuenta">{lista.length}</span>
+                  </button>
+                  <span class="agente-acciones">
+                    <Papelera titulo={`Borrar ${lista.length === 1 ? 'la conversación' : `las ${lista.length} conversaciones`} de ${titulo.toLowerCase()} (van a la papelera)`}
+                      onBorrar={() => borrarVarias(lista)} />
+                  </span>
+                </h3>
+                {ab && <ul class="grupo-lista">{lista.map(s => <Fila key={s.proveedor + s.sessionId} s={s} onElegir={onCerrarCajon} />)}</ul>}
+              </div>
+            );
             return (
               <div key={cwd} class="tramo proyecto" data-abierto={String(ab)}>
                 <h3 class="grupo-titulo tramo-titulo proyecto-titulo" title={rutaCorta(cwd)}>

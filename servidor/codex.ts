@@ -102,8 +102,16 @@ export async function limitesCodex(): Promise<Limite | undefined> {
 
 export async function historialCodex(): Promise<Sesion[]> {
   const c = await conexion();
-  const r = await c.pedir<P>('thread/list', { limit: 100, sortKey: 'updated_at', sourceKinds: ['cli', 'vscode', 'exec', 'appServer'] });
-  return (Array.isArray(r.data) ? r.data.map(objeto) : []).filter(t => !t.ephemeral && !t.parentThreadId).map(t => ({
+  // Todas, de a páginas (Codex devuelve un cursor mientras queden); el tope solo evita un bucle sin fin
+  const hilos: P[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < 50; i++) {
+    const r: P = await c.pedir<P>('thread/list', { limit: 200, cursor, useStateDbOnly: true, sortKey: 'updated_at', sourceKinds: ['cli', 'vscode', 'exec', 'appServer'] });
+    if (Array.isArray(r.data)) hilos.push(...r.data.map(objeto));
+    cursor = cadena(r.nextCursor) || null;
+    if (!cursor) break;
+  }
+  return hilos.filter(t => !t.ephemeral && !t.parentThreadId).map(t => ({
     proveedor: 'codex' as const, sessionId: cadena(t.id), titulo: (cadena(t.name) || cadena(t.preview).replace(/^❯\s*/, '').slice(0, 60) || 'Sin título').trim(),
     cwd: cadena(t.cwd), modificado: (Number(t.updatedAt) || 0) * 1000, rama: cadena(objeto(t.gitInfo).branch) || undefined }));
 }

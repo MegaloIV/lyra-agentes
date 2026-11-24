@@ -136,3 +136,18 @@ export function aMarkdown(bloques: Bloque[], titulo: string, quien: string, cwd:
   return salida.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
+
+/** Tramo de fecha de una conversación para agrupar la barra por día o por semana (la semana empieza el lunes) */
+export function tramoDe(fecha: number, modo: 'dia' | 'semana'): { clave: string; titulo: string } {
+  const dia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const hoy = dia(new Date()), f = dia(new Date(fecha));
+  const conAño = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleDateString('es', { ...o, ...(d.getFullYear() !== hoy.getFullYear() ? { year: 'numeric' } : {}) });
+  if (modo === 'dia') {
+    const dias = Math.round((hoy.getTime() - f.getTime()) / 864e5);
+    const titulo = dias <= 0 ? 'Hoy' : dias === 1 ? 'Ayer' : conAño(f, { weekday: 'long', day: 'numeric', month: 'short' });
+    return { clave: `dia:${f.getTime()}`, titulo: titulo[0]!.toUpperCase() + titulo.slice(1).replace(',', '') };
+  }
+  const lunes = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);
+  const l = lunes(f), semanas = Math.round((lunes(hoy).getTime() - l.getTime()) / (7 * 864e5));
+  return { clave: `semana:${l.getTime()}`, titulo: semanas <= 0 ? 'Esta semana' : semanas === 1 ? 'Semana pasada' : `Semana del ${conAño(l, { day: 'numeric', month: 'short' })}` };
+}

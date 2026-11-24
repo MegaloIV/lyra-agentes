@@ -992,3 +992,9 @@ html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra));
   font-weight: 800; font-size: clamp(4rem, 14vw, 11rem); letter-spacing: .14em; line-height: 1; padding-left: .14em;
   color: var(--texto-fuerte); opacity: .13; user-select: none; pointer-events: none;
 }
+
+/* Agrupar el historial: carpeta, día o semana */
+.orden { display: flex; gap: .15rem; margin: 0 .4rem .45rem; padding: .15rem; border: 1px solid var(--borde); border-radius: var(--radio-chico); background: var(--fondo); }
+.orden > button { flex: 1; padding: .2rem .3rem; border: 0; border-radius: calc(var(--radio-chico) - 2px); background: none; color: var(--tenue); font-size: .74rem; }
+.orden > button:hover { color: var(--texto); }
+.orden > button[aria-pressed="true"] { background: var(--superficie); color: var(--texto-fuerte); }
