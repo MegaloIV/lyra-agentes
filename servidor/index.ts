@@ -108,7 +108,11 @@ servidor.on('upgrade', (req, socket, head) => {
           case 'reanudar': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, prompt: m.texto, reanudar: m.sessionId }); cliente.agente = a.id; break; }
           case 'abrirSesion': { const bloques = await gestor.cargar(m.proveedor || 'claude', m.sessionId, m.cwd); emitir({ t: 'documento', agente: m.sessionId, bloques, soloLectura: true }); seguidor.mirar(ws, { proveedor: m.proveedor || 'claude', sessionId: m.sessionId, cwd: m.cwd }); break; }
           case 'soltar': seguidor.mirar(ws); break;
-          case 'enviar': gestor.enviar(m.agente, m.texto); break;
+          case 'enviar': {
+            const a = gestor.obtener(m.agente);
+            if (m.ya && (a.estado === 'trabajando' || a.estado === 'esperando')) await a.motor.interrumpir().catch(() => {});
+            gestor.enviar(m.agente, m.texto); break;
+          }
           case 'responder': gestor.responder(m); break;
           case 'cerrar': gestor.cerrar(m.agente); emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'interrumpir': await gestor.obtener(m.agente).motor.interrumpir(); break;

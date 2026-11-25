@@ -918,8 +918,29 @@ body.arrastrando iframe { pointer-events: none; }
 .desplegable-campo { position: sticky; bottom: -.25rem; background: var(--superficie); padding-bottom: .25rem; }
 .redactor-barra { flex-wrap: nowrap; align-items: flex-end; }
 .ajustes { flex: 1; }
-.redactor-estado { flex: 0 1 auto; min-width: 0; }
+/* El estado («Pensando… 12s · ↓ 1.2k tokens») flota sobre el borde de arriba de la caja, fuera de la fila de ajustes */
+.redactor-caja { position: relative; }
+.redactor-estado {
+  position: absolute; left: .9rem; bottom: calc(100% + .3rem); max-width: calc(100% - 1.8rem);
+  min-width: 0; text-align: left; padding: .08rem .6rem; border-radius: 999px; pointer-events: none;
+  background: var(--fondo); border: 1px solid var(--borde);
+}
 .redactor-estado:empty { display: none; }
+/* Los ajustes nunca pasan a una segunda línea: si la caja se angosta (el panel derecho ancho), se compactan por partes */
+.redactor-caja { container-type: inline-size; }
+.ajustes { flex-wrap: nowrap; }
+.ajustes .chip[data-chip="modelo"] { display: inline-block; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 640px) {
+  .ajustes .chip[data-chip="contexto"] { display: none; }
+  .ajustes .chip:is([data-chip="esfuerzo"], [data-chip="modo"], [data-chip="carpeta"]) { font-size: 0; gap: 0; padding: .3rem .45rem; }
+}
+@container (max-width: 440px) {
+  .ajustes .chip[data-chip="proveedor"] { font-size: 0; gap: 0; padding: .3rem .45rem; }
+  .ajustes .chip[data-chip="modelo"] { max-width: 7rem; }
+}
+@container (max-width: 300px) {
+  .ajustes .chip[data-chip="modelo"] { max-width: 4.5rem; }
+}
 /* La papelera armada no cambia de tamaño: el aviso flota a su izquierda, así nada se corre bajo el cursor */
 .agente-accion[data-armada="true"] { width: 1.45rem; padding: 0; display: grid; position: relative; overflow: visible; background: var(--rojo); color: #1c1d1b; }
 .papelera-texto {

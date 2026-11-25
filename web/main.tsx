@@ -110,12 +110,13 @@ function leerBarra(): number { try { const n = Number(localStorage.getItem('lyra
  *  hasta el botón «tamaños de siempre» (o doble clic en el borde) */
 const PANEL = BARRA;
 type Anchos = Partial<Record<Exclude<Panel, null>, number>>;
-/** El panel crece hasta que el nombre de la sesión desaparece del todo de la cabecera (se va cortando con «…» por el camino).
- *  Se mide con el panel en `actual` px: todo el ancho que ocupa la caja del título es lo que todavía puede crecer */
+/** El panel crece la mitad de lo que haría falta para que el nombre de la sesión desaparezca de la cabecera (con todo, tapaba
+ *  demasiado la conversación). Se mide con el panel en `actual` px: el ancho de la caja del título es lo que todavía podría crecer.
+ *  `actual + título` no cambia con el ancho del panel, así que medir desde cualquier ancho da el mismo tope */
 function topePanel(actual: number): number {
   const caja = document.querySelector<HTMLElement>('.lectura-titulos');
-  if (!caja) return Math.round(window.innerWidth * 0.6);
-  return Math.max(PANEL, Math.round(actual + caja.clientWidth));
+  if (!caja) return Math.round(window.innerWidth * 0.4);
+  return Math.max(PANEL, Math.round(PANEL + (actual + caja.clientWidth - PANEL) / 2));
 }
 function leerAnchos(): Anchos {
   try { const a = JSON.parse(localStorage.getItem('lyra-anchos-propios') || '{}'); return a && typeof a === 'object' ? a : {}; } catch { return {}; }
@@ -218,14 +219,12 @@ function App() {
   useLayoutEffect(() => {
     // Solo con el panel a la vista: oculto, el título tiene todo el ancho y el tope crecería sin fin
     if (!verPanel || angosto) return;
-    setTope(topePanel(ancho));
-    // Al cambiar la ventana, el tope se vuelve a medir desde el ancho de siempre (al máximo, el título no deja espacio que medir)
-    const medir = () => maximo ? setTope(Infinity) : setTope(topePanel(ancho));
+    // Al máximo el título conserva la mitad de su espacio, así que se puede medir desde el ancho que haya (también al cambiar la ventana)
+    const medir = () => setTope(topePanel(ancho));
+    medir();
     window.addEventListener('resize', medir);
     return () => window.removeEventListener('resize', medir);
   }, [panel, verPanel, angosto, titulo, ancho, !!v, maximo]);
-  // Al máximo, con o sin conversación la cabecera tiene otros botones: el tope se vuelve a medir desde el ancho de siempre
-  useLayoutEffect(() => { if (maximo) setTope(Infinity); }, [!!v, verPanel]);
 
   function arrastrarBorde(e: PointerEvent) {
     if (!panel || angosto) return;

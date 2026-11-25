@@ -50,7 +50,7 @@ lyra-agentes --instalar  # la agrega al menú de aplicaciones
 
 **Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. El agente local no tiene límites.
 
-**Panel de la derecha:** sus pestañas están abajo en la barra izquierda, sobre el uso: índice, visor, GitHub, terminales del agente, memorias, tus terminales y notas (post-its que se guardan solos y se ven en todas las conversaciones). El último botón de esa fila cambia el ancho: si algo no está en su tamaño de siempre lo restablece; si ya lo está, lleva el panel al máximo.
+**Panel de la derecha:** sus pestañas están abajo en la barra izquierda, sobre el uso: índice, visor, GitHub, terminales del agente, memorias, tus terminales y notas (post-its que se guardan solos y se ven en todas las conversaciones). El último botón de esa fila cambia el ancho: si algo no está en su tamaño de siempre lo restablece; si ya lo está, lleva el panel al máximo (crece la mitad de lo que haría falta para tapar el nombre de la sesión).
 
 Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub, Ctrl+M memorias, Ctrl+T terminales, Ctrl+Shift+T tus terminales, Ctrl+Shift+N notas y Shift+Tab siguiente modo de permisos.
 
@@ -112,4 +112,6 @@ npm run typecheck
 - `web/` es la interfaz, hecha con Preact.
 - `ventana/ventana.py` es la ventana GTK.
 
-En la caja: Ctrl+C sin selección detiene el agente; Ctrl+X seguido de Ctrl+S en 1,5 segundos envía. Con selección se conservan copiar y cortar. Ctrl+S solo no guarda la página.
+En la caja: Ctrl+C sin selección detiene el agente; Ctrl+X seguido de Ctrl+S en 1,5 segundos envía ya: si el agente está trabajando, lo interrumpe y manda el mensaje enseguida (Enter, en cambio, lo deja en cola). Con selección se conservan copiar y cortar; sin ella, Ctrl+X no hace nada (antes sonaba). Ctrl+S solo no guarda la página. El contador «Pensando…» flota sobre la caja, y los ajustes se compactan si la caja se angosta, así nada se descuadra.
+
+Con el perfil de energía en «ahorro», WebKit dibuja a 30 cuadros por segundo y escribir se siente lento; la ventana lo ignora y dibuja a 60. Para respetar el ahorro: `LYRA_AHORRO=1 lyra-agentes`.

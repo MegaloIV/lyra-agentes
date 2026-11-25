@@ -73,7 +73,8 @@ export type ClienteMensaje =
   /** Las subcarpetas de `ruta`, para el explorador del chip «carpeta» */
   | { t: 'explorar'; ruta: string }
   | { t: 'crear'; cwd: string; proveedor?: Proveedor; modelo?: string; esfuerzo?: string; modo?: PermissionMode; prompt?: string }
-  | { t: 'enviar'; agente: string; texto: string }
+  /** `ya`: interrumpe lo que esté haciendo y lo manda enseguida (Ctrl+X Ctrl+S, como en la terminal); sin él, espera su turno */
+  | { t: 'enviar'; agente: string; texto: string; ya?: boolean }
   | { t: 'interrumpir' | 'cerrar' | 'leer' | 'comandos'; agente: string }
   | { t: 'responder'; agente: string; solicitud: string; decision: 'permitir' | 'siempre' | 'rechazar'; mensaje?: string; respuestas?: Record<string, string> }
   | { t: 'modo'; agente: string; modo: PermissionMode }

@@ -12,6 +12,12 @@ import subprocess
 import sys
 from urllib.parse import urlparse
 
+# Con el perfil de energía en «ahorro», WebKit entra en su modo de bajo consumo y dibuja a 30 cuadros por segundo:
+# escribir en la caja se siente con retraso. El monitor «dbus» de GIO no lo detecta en este sistema (el del portal sí),
+# así que la ventana vuelve a 60. Va antes de cargar GTK y lo hereda el proceso web. LYRA_AHORRO=1 deja el de siempre.
+if os.environ.get("LYRA_AHORRO") != "1":
+    os.environ.setdefault("GIO_USE_POWER_PROFILE_MONITOR", "dbus")
+
 import gi
 
 gi.require_version("Gtk", "4.0")

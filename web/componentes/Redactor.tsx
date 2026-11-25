@@ -196,7 +196,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   const b = estado.borrador, datosNuevo = nuevo ? info(b.proveedor) : undefined;
   const falta = nuevo ? !datosNuevo ? 'Cargando los modelos…' : !datosNuevo.instalado ? `${datosNuevo.nombre} no está instalado.` : '' : '';
 
-  function mandar() {
+  /** `ya`: Ctrl+X Ctrl+S, como en la terminal: si el agente está trabajando, lo interrumpe y manda el mensaje enseguida */
+  function mandar(ya = false) {
     const t = texto.trim();
     if (!t) return;
     if (nuevo) {
@@ -207,7 +208,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
     }
     else if (vista?.tipo === 'sesion') crearAgente({ t: 'reanudar', sessionId: vista.sessionId, cwd: vista.cwd, proveedor: vista.proveedor, texto: t });
     else if (agente?.estado === 'error' && agente.sessionId) crearAgente({ t: 'reanudar', sessionId: agente.sessionId, cwd: agente.cwd, proveedor: agente.proveedor, texto: t });
-    else if (agente) enviar({ t: 'enviar', agente: agente.id, texto: t });
+    else if (agente) enviar({ t: 'enviar', agente: agente.id, texto: t, ...(ya && trabajando ? { ya: true } : {}) });
     else return;
     setTexto(''); borradores.delete(k);
   }
@@ -231,10 +232,16 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   function tecla(e: KeyboardEvent) {
     if (e.isComposing) return;
     const letra = e.key.toLowerCase();
-    if (e.ctrlKey && !e.altKey && !e.metaKey && letra === 'x') { if (!e.repeat) prefijo.current = Date.now(); return; }
+    if (e.ctrlKey && !e.altKey && !e.metaKey && letra === 'x') {
+      // Sin nada seleccionado no hay qué cortar: la ventana sonaba con cada Ctrl+X
+      const c = caja.current;
+      if (!c || c.selectionStart === c.selectionEnd) e.preventDefault();
+      if (!e.repeat) prefijo.current = Date.now();
+      return;
+    }
     if (e.ctrlKey && !e.altKey && !e.metaKey && letra === 's') {
       e.preventDefault();
-      if (!e.repeat && prefijo.current && Date.now() - prefijo.current <= 1500) mandar();
+      if (!e.repeat && prefijo.current && Date.now() - prefijo.current <= 1500) mandar(true);
       prefijo.current = 0; return;
     }
     if (!['Control', 'Shift'].includes(e.key)) prefijo.current = 0;
@@ -288,16 +295,17 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
         </div>
       )}
       <div class="redactor-caja" data-nuevo={nuevo ? 'true' : undefined}>
+        {/* Flota sobre la caja: que aparezca o cambie de largo no corre los ajustes ni los botones */}
+        {!filtrados.length && <span class="redactor-estado">{!avisoEsc && trabajando && agente?.progreso && !agente.progreso.fin ? <Contador agente={agente} /> : textoEstado}</span>}
         <textarea ref={caja} class="redactor-texto" rows={1} value={texto}
           placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : nuevo ? `¿Qué hacemos? (Enter envía · Shift+Enter, nueva línea)` : `Escribe a ${quien}…`}
           onInput={e => { setTexto((e.currentTarget as HTMLTextAreaElement).value); setPopupCerrado(false); setElegido(0); }}
           onKeyDown={tecla} onBlur={() => { prefijo.current = 0; }} />
         <div class="redactor-barra">
           <div class="ajustes"><Ajustes agente={agente} nuevo={nuevo} solo={vista?.tipo === 'sesion' ? vista.proveedor : undefined} /></div>
-          <span class="redactor-estado">{!avisoEsc && trabajando && agente?.progreso && !agente.progreso.fin ? <Contador agente={agente} /> : textoEstado}</span>
           {agente?.estado === 'error' && agente.sessionId && <button type="button" class="icono-boton" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd, proveedor: agente.proveedor })}><Icono nombre="recargar" /></button>}
           {trabajando && <button type="button" class="boton-detener" aria-label="Detener" onClick={() => agente && enviar({ t: 'interrumpir', agente: agente.id })}><Icono nombre="detener" /></button>}
-          <button type="button" class="boton-enviar" aria-label="Enviar" disabled={!texto.trim() || !!falta} onClick={mandar}><Icono nombre="enviar" /></button>
+          <button type="button" class="boton-enviar" aria-label="Enviar" disabled={!texto.trim() || !!falta} onClick={() => mandar()}><Icono nombre="enviar" /></button>
         </div>
       </div>
     </footer>

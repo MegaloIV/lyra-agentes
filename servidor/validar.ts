@@ -25,7 +25,7 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'registroPrueba': valido = texto('cwd') && !!m.cwd && Number.isSafeInteger(m.run) && (m.run as number) > 0 && (m.job === undefined || Number.isSafeInteger(m.job) && (m.job as number) > 0); break;
     case 'guardarGrupos': valido = m.grupos !== null && typeof m.grupos === 'object'; break;
     case 'guardarNotas': valido = Array.isArray(m.notas) && m.notas.length <= 300; break;
-    case 'enviar': valido = texto('agente') && texto('texto'); break;
+    case 'enviar': valido = texto('agente') && texto('texto') && (m.ya === undefined || typeof m.ya === 'boolean'); break;
     case 'interrumpir': case 'cerrar': case 'leer': case 'comandos': valido = texto('agente'); break;
     case 'modelo': valido = texto('agente') && (m.modelo === null || texto('modelo')); break;
     case 'modo': valido = texto('agente') && modos.includes(m.modo as PermissionMode); break;
