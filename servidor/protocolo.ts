@@ -68,6 +68,10 @@ export type Consola = { id: string; cwd: string; titulo: string; numero: number;
 export type Bateria = { nivel: number; estado: 'cargando' | 'descargando' | 'llena' | 'enchufada' };
 export type ClienteMensaje =
   | { t: 'hola' | 'historial' }
+  /** Para el acompañante: dónde está la caja de texto (px de la página), que se escribe en ella y los «@lyra …» */
+  | { t: 'caja'; x: number; y: number; ancho: number; alto: number; vw: number; vh: number }
+  | { t: 'sinCaja' | 'tecleando' }
+  | { t: 'charla'; texto: string; agente?: string }
   /** La ventana dejó de mirar una conversación del historial (ya no hace falta seguirla) */
   | { t: 'soltar' }
   /** Las subcarpetas de `ruta`, para el explorador del chip «carpeta» */
@@ -131,6 +135,8 @@ export type ServidorMensaje =
   | { t: 'borrada'; sessionId?: string; agente?: string }
   | { t: 'archivoBorrado'; ruta: string; cwd?: string; id?: string }
   | { t: 'enfocar'; agente: string }
+  /** El acompañante (ver acompanante.ts): si hay uno y si está sentado en la caja de texto (`ancho` en px de la página) */
+  | { t: 'acompanante'; configurado: boolean; sentada: boolean; ancho: number }
   | { t: 'grupos'; grupos: Grupos }
   | { t: 'notas'; notas: Nota[] }
   | { t: 'git'; cwd: string; git?: EstadoGit; error?: string }

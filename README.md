@@ -86,6 +86,7 @@ Variables de entorno; también se pueden escribir, una por línea, en `~/.config
 | `OLLAMA_MODELS` | Carpeta de modelos de Ollama, si no es la de siempre. |
 | `LYRA_AGENTES_TERMINAL` | Terminal para «Abrir terminal aquí» (si no, `$TERMINAL` o la primera instalada). |
 | `LYRA_AGENTES_GPU` | Si tiene algún valor, la ventana no fuerza la tarjeta integrada en equipos con dos. |
+| `LYRA_AGENTES_ACOMPANANTE` | URL de un acompañante (ver abajo) al que se mandan los avisos. |
 
 **Transparencia:** en la ventana propia, la barra de la izquierda y la lectura, el índice y el visor (más oscuros) son translúcidos (90 %), con el fondo desenfocado; sin foco, el compositor baja toda la ventana a 85 %. El desenfoque lo hace el compositor: la ventana lo pide con `backdrop-filter` (GTK 4.24 o más nuevo, protocolo `ext-background-effect`). Si tu compositor le pone opacidad a todas las ventanas, quítasela a esta (dejando solo una baja cuando no tiene el foco) para que no se sume. En Hyprland:
 
@@ -97,9 +98,36 @@ Las opacidades se cambian con las variables CSS `--opacidad-barra` y `--opacidad
 
 El estado se guarda en `~/.local/state/lyra-agentes/`: el token, las carpetas propias y el registro de las sesiones locales. Las conversaciones quedan donde las guarda cada CLI (`~/.claude`, `~/.codex`).
 
+## Acompañante
+
+Un acompañante es otro programa de tu computadora, por ejemplo un asistente de escritorio, que se entera de lo que
+pasa con los agentes y puede manejarlos. Se activa con `LYRA_AGENTES_ACOMPANANTE=URL`. A esa URL se mandan, con
+POST JSON y la cabecera `X-Lyra: 1`:
+
+- `trabaja`, `fin`, `permiso`, `pregunta` y `error` de cada agente: su proveedor, título y carpeta, y un texto que
+  depende del aviso: lo último que dijo, lo que pide en corto («ejecutar `npm test`») o el motivo del error.
+  Además, si lo estás mirando. Si el acompañante responde, la ventana no manda además la notificación del escritorio.
+- `caja` con la posición de la caja de texto, en px de la página (`vw` × `vh` es el tamaño de la página, para
+  pasarla a la pantalla). Llega al cambiar y cada pocos segundos; `sin_caja` llega cuando la ventana se oculta.
+- `tecleando`, como mucho una vez por segundo mientras escribes.
+- `charla`: lo que escribes en la caja empezando con **`@lyra`**. No va al agente sino al acompañante, junto con la
+  conversación que miras y lo último que dijo el agente.
+
+El acompañante maneja los agentes por una API JSON, con el token de `~/.local/state/lyra-agentes/token` en la
+cabecera `X-Lyra-Token`:
+
+| Ruta | Para qué |
+| --- | --- |
+| `GET /api/estado` | Los agentes abiertos: estado, lo que piden y lo último que dijeron. |
+| `POST /api/crear` | `{cwd, prompt, proveedor?, modelo?, esfuerzo?, modo?}` → `{agente}`. |
+| `POST /api/enviar` | `{agente, texto}`. |
+| `POST /api/responder` | `{agente, solicitud, decision: permitir \| siempre \| rechazar}`. |
+| `POST /api/enfocar` | `{agente}`: abre la ventana con ese agente. |
+| `POST /api/acompanante` | `{sentada, ancho}`: el acompañante está sentado en la caja de texto. La caja le deja `ancho` px libres a la derecha del texto. |
+
 ## Seguridad
 
-- El servidor escucha solo en 127.0.0.1 y exige un token aleatorio, guardado con permisos 600, en cada conexión. Además comprueba el origen.
+- El servidor escucha solo en 127.0.0.1 y exige un token aleatorio, guardado con permisos 600, en cada conexión. Además comprueba el origen. La API del acompañante usa el mismo token y no acepta pedidos de otras páginas: si llega un `Origin`, tiene que ser el propio.
 - La pestaña GitHub solo lee: git sin fsmonitor, diff externo ni textconv (un repo ajeno no puede hacer que ejecute programas suyos) y `gh` con la sesión que ya tienes; la app no guarda tokens. Solo lee repos de tu carpeta personal, `/tmp` y `/mnt/shared`.
 - El visor solo muestra archivos de tu carpeta personal, `/tmp` y `/mnt/shared`, nunca de carpetas ocultas como `~/.ssh`. Resuelve los enlaces simbólicos antes de comprobar la ruta. El HTML se muestra sin scripts. Borrar desde el visor sigue las mismas reglas y nunca es definitivo: solo mueve a la papelera (en `/tmp`, que no tiene, no borra). El explorador de carpetas solo lista nombres de carpetas, sin las ocultas.
 - Borrar una conversación no es definitivo: las de Claude y las locales van a la papelera del escritorio, y las de Codex se archivan.

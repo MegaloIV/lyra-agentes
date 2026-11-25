@@ -71,6 +71,30 @@ function useCompactar(ref: { current: HTMLElement | null }) {
   }, []);
 }
 
+/** Le cuenta al acompañante (Lyra) dónde está la caja, para que se siente encima: al cambiar de lugar o tamaño
+ *  y cada pocos segundos (si Lyra se abre después, igual se entera). Con la ventana oculta, que no hay caja. */
+function useCajaParaAcompanante(ref: { current: HTMLElement | null }) {
+  const configurado = estado.acompanante.configurado;
+  useEffect(() => {
+    const el = ref.current; if (!el || !configurado) return;
+    let ultima = '', reloj: ReturnType<typeof setTimeout> | undefined;
+    const mandar = (siempre = false) => {
+      if (document.hidden) { if (ultima !== 'oculta') { ultima = 'oculta'; enviar({ t: 'sinCaja' }); } return; }
+      const r = el.getBoundingClientRect();
+      const caja = { x: Math.round(r.left), y: Math.round(r.top), ancho: Math.round(r.width), alto: Math.round(r.height), vw: innerWidth, vh: innerHeight };
+      const clave = JSON.stringify(caja);
+      if (siempre || clave !== ultima) { ultima = clave; enviar({ t: 'caja', ...caja }); }
+    };
+    const pronto = () => { clearTimeout(reloj); reloj = setTimeout(() => mandar(), 150); };
+    const tam = new ResizeObserver(pronto);
+    tam.observe(el); tam.observe(document.body);
+    addEventListener('resize', pronto); document.addEventListener('visibilitychange', pronto);
+    const latido = setInterval(() => mandar(true), 4000);
+    mandar(true);
+    return () => { tam.disconnect(); clearTimeout(reloj); clearInterval(latido); removeEventListener('resize', pronto); document.removeEventListener('visibilitychange', pronto); };
+  }, [configurado]);
+}
+
 /** Un chip que abre una lista corta hacia arriba */
 function Chip({ id, abierto, setAbierto, texto, titulo, datos, children }: { id: string; abierto: string; setAbierto: (v: string) => void; texto: preact.ComponentChildren; titulo: string; datos?: Record<string, string | undefined>; children?: preact.ComponentChildren }) {
   return (
@@ -201,6 +225,9 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   const selector = useRef<HTMLInputElement>(null);
   const ajustes = useRef<HTMLDivElement>(null);
   useCompactar(ajustes);
+  const marco = useRef<HTMLDivElement>(null);
+  useCajaParaAcompanante(marco);
+  const ultimaTecla = useRef(0);
   const componiendo = useRef(false);
   /** Lo último que borró Ctrl+U, para que Ctrl+Z lo devuelva */
   const borrado = useRef<{ clave: string; texto: string; adjuntos: Adjunto[] } | null>(null);
@@ -267,6 +294,16 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   /** `ya`: Ctrl+X Ctrl+S, como en la terminal: si el agente está trabajando, lo interrumpe y manda el mensaje enseguida */
   function mandar(ya = false) {
     if (subiendo || componiendo.current || !texto.trim()) return;
+    // «@lyra …»: se lo dices a Lyra (el acompañante), no al agente
+    const aLyra = /^@lyra\b[\s,:]*/i.exec(texto.trim());
+    if (aLyra && estado.acompanante.configurado) {
+      const dicho = textoConAdjuntos(texto.trim().slice(aLyra[0].length), adjuntos);
+      if (!dicho.trim()) return;
+      enviar({ t: 'charla', texto: dicho, ...(agente ? { agente: agente.id } : {}) });
+      recordar(texto.trim(), agente?.cwd || (vista?.tipo === 'sesion' ? vista.cwd : b.cwd) || '~');
+      recorrido.current = null; setTexto(''); borradores.delete(k); archivosBorrador.delete(k); setAdjuntos([]);
+      return;
+    }
     const t = textoConAdjuntos(texto, adjuntos);
     if (nuevo) {
       if (falta) return;
@@ -444,7 +481,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
           ))}
         </div>
       )}
-      <div class="redactor-caja" data-nuevo={nuevo ? 'true' : undefined}
+      <div class="redactor-caja" ref={marco} data-nuevo={nuevo ? 'true' : undefined}
+        data-acompanante={estado.acompanante.sentada ? 'true' : undefined} style={estado.acompanante.sentada ? { '--acompanante': `${estado.acompanante.ancho}px` } : undefined}
         onDragOver={e => { if ([...e.dataTransfer?.types || []].some(t => t === 'Files' || t === 'text/uri-list')) e.preventDefault(); }}
         onDrop={e => { if (recibirArchivos(e.dataTransfer)) e.preventDefault(); }}>
         {/* Flota sobre la caja: que aparezca o cambie de largo no corre los ajustes ni los botones */}
@@ -457,7 +495,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
           }}><Icono nombre="cerrar" tam={11} /></button></span>)}</div>}
         <textarea ref={caja} class="redactor-texto" rows={1}
           placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : nuevo ? `¿Qué hacemos? (Enter envía · Shift+Enter, nueva línea)` : `Escribe a ${quien}…`}
-          onInput={e => { recorrido.current = null; if (e.currentTarget.value) borrado.current = null; e.currentTarget.dataset.escribiendo = String(Date.now()); setTexto(e.currentTarget.value); setPopupCerrado(false); setElegido(0); }}
+          onInput={e => { recorrido.current = null; if (estado.acompanante.configurado && Date.now() - ultimaTecla.current > 1000) { ultimaTecla.current = Date.now(); enviar({ t: 'tecleando' }); } if (e.currentTarget.value) borrado.current = null; e.currentTarget.dataset.escribiendo = String(Date.now()); setTexto(e.currentTarget.value); setPopupCerrado(false); setElegido(0); }}
           onCompositionStart={() => { componiendo.current = true; }}
           onCompositionEnd={e => { componiendo.current = false; setTexto(e.currentTarget.value); }}
           onPaste={e => { if (recibirArchivos(e.clipboardData)) e.preventDefault(); }}

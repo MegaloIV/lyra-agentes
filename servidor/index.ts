@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
-import type { ServidorMensaje } from './protocolo.ts';
-import { cargarToken, validarConexion, archivoPublico } from './seguridad.ts';
+import type { Bloque, ClienteMensaje, ServidorMensaje } from './protocolo.ts';
+import { cargarToken, validarConexion, validarApi, archivoPublico } from './seguridad.ts';
 import { validarMensaje } from './validar.ts';
 import { GestorAgentes } from './agentes.ts';
 import { explorar } from './carpetas.ts';
@@ -26,6 +26,7 @@ import { diffGit, estadoGit, infoGithub, registroPrueba } from './git.ts';
 import { memorias } from './memorias.ts';
 import { Consolas } from './consolas.ts';
 import { guardarAdjunto, MAX_ADJUNTO } from './adjuntos.ts';
+import { crearAcompanante, queDice, ultimoTexto } from './acompanante.ts';
 // Si el servidor se lanzó desde una sesión de Claude Code, sus agentes heredarían estas variables y se
 // creerían sesiones hijas (no se guardan ni se pueden retomar).
 for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_AGENT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete process.env[k];
@@ -44,6 +45,48 @@ const alAbrir = (id: string) => {
 };
 const gestor = new GestorAgentes(emitir, crearNotificador(visible, alAbrir), id => [...clientes.values()].some(c => c.agente === id && c.visible && Date.now() - c.fecha < 2000));
 const consolas = new Consolas(emitir);
+// Un acompañante opcional (LYRA_AGENTES_ACOMPANANTE): recibe los avisos y la caja de texto, y maneja agentes por la API
+const acompanante = crearAcompanante();
+if (acompanante.configurado) gestor.acompanante = acompanante;
+let sentada = { sentada: false, ancho: 0 };
+const estadoAcompanante = (): ServidorMensaje => ({ t: 'acompanante', configurado: acompanante.configurado, ...sentada });
+const NOMBRE_PROVEEDOR = { claude: 'Claude', codex: 'Codex', local: 'el agente local' } as const;
+
+/** La API para el acompañante (u otro programa local): JSON, con el token en la cabecera X-Lyra-Token */
+async function api(ruta: string, metodo: string, datos: Record<string, unknown>): Promise<unknown> {
+  if (ruta === '/api/estado' && metodo === 'GET') {
+    return { agentes: [...gestor.agentes.values()].map(a => {
+      const pide = a.bloques.findLast((b): b is Extract<Bloque, { tipo: 'permiso' | 'pregunta' | 'plan' }> => (b.tipo === 'permiso' || b.tipo === 'pregunta' || b.tipo === 'plan') && b.estado === 'pendiente');
+      return { id: a.id, proveedor: a.proveedor, titulo: a.titulo, cwd: a.cwd, estado: a.estado, modelo: a.modelo, ultimaActividad: a.ultimaActividad,
+        ...(pide ? { pide: queDice(pide), solicitud: pide.id, tipoPedido: pide.tipo } : {}), ultimo: ultimoTexto(a.bloques, 400) };
+    }) };
+  }
+  if (metodo !== 'POST') throw new Error('Método no válido.');
+  switch (ruta) {
+    case '/api/crear': {
+      const m = validarMensaje({ ...datos, t: 'crear' }) as Extract<ClienteMensaje, { t: 'crear' }>;
+      const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.prompt });
+      return { agente: a.id };
+    }
+    case '/api/enviar': { const m = validarMensaje({ ...datos, t: 'enviar' }) as Extract<ClienteMensaje, { t: 'enviar' }>; gestor.enviar(m.agente, m.texto); return { ok: true }; }
+    case '/api/responder': { const m = validarMensaje({ ...datos, t: 'responder' }) as Extract<ClienteMensaje, { t: 'responder' }>; gestor.responder(m); return { ok: true }; }
+    case '/api/enfocar': { const id = String(datos.agente || ''); gestor.obtener(id); alAbrir(id); return { ok: true }; }
+    case '/api/acompanante': {
+      const ancho = Number(datos.ancho);
+      sentada = { sentada: datos.sentada === true, ancho: Number.isFinite(ancho) ? Math.max(0, Math.min(400, Math.round(ancho))) : 0 };
+      emitir(estadoAcompanante()); return { ok: true };
+    }
+  }
+  throw new Error('No existe esa ruta.');
+}
+const RUTAS_API = new Set(['/api/estado', '/api/crear', '/api/enviar', '/api/responder', '/api/enfocar', '/api/acompanante']);
+async function leerJson(req: import('node:http').IncomingMessage): Promise<Record<string, unknown>> {
+  let total = 0; const partes: Buffer[] = [];
+  for await (const trozo of req) { total += (trozo as Buffer).length; if (total > 1024 * 1024) throw new Error('El pedido es muy grande.'); partes.push(trozo as Buffer); }
+  const datos = partes.length ? JSON.parse(Buffer.concat(partes).toString('utf8')) : {};
+  if (!datos || typeof datos !== 'object' || Array.isArray(datos)) throw new Error('Se esperaba un objeto JSON.');
+  return datos;
+}
 // Una conversación del historial que otra terminal sigue usando se vuelve a mandar cada vez que cambia su archivo
 const seguidor = new SeguidorSesiones(async (s, quienes) => {
   if ([...gestor.agentes.values()].some(a => a.sessionId === s.sessionId)) return;   // ya la tiene Lyra abierta
@@ -61,6 +104,15 @@ void catalogo().catch(() => {});   // se arma al arrancar para que el diálogo l
 const servidor = createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; frame-src blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+  const rutaApi = (req.url || '').split('?')[0]!;
+  if (RUTAS_API.has(rutaApi)) {
+    if (!validarApi(token, String(req.headers['x-lyra-token'] || ''), req.headers.origin, puerto, desarrollo)) { res.writeHead(401); res.end(); return; }
+    try {
+      const respuesta = await api(rutaApi, req.method || 'GET', req.method === 'POST' ? await leerJson(req) : {});
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(respuesta));
+    } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : 'No se pudo.' })); }
+    return;
+  }
   if (req.method === 'POST' && (req.url || '').split('?')[0] === '/api/adjunto') {
     if (!validarConexion(token, String(req.headers['x-lyra-token'] || ''), req.headers.origin, puerto, desarrollo)) {
       res.writeHead(401); res.end(); return;
@@ -115,8 +167,18 @@ servidor.on('upgrade', (req, socket, head) => {
       try {
         const m = validarMensaje(JSON.parse(datos.toString())), cliente = clientes.get(ws)!;
         switch (m.t) {
-          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); enviar(ws, { t: 'notas', notas: await leerNotas() }); enviar(ws, { t: 'bateria', bateria: ultimaBateria }); enviar(ws, { t: 'consolas', consolas: consolas.resumen() }); break;
+          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); enviar(ws, estadoAcompanante()); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); enviar(ws, { t: 'notas', notas: await leerNotas() }); enviar(ws, { t: 'bateria', bateria: ultimaBateria }); enviar(ws, { t: 'consolas', consolas: consolas.resumen() }); break;
           case 'foco': cliente.visible = m.visible; cliente.fecha = Date.now(); break;
+          case 'caja': void acompanante.avisar({ tipo: 'caja', x: m.x, y: m.y, ancho: m.ancho, alto: m.alto, vw: m.vw, vh: m.vh }); break;
+          case 'sinCaja': void acompanante.avisar({ tipo: 'sin_caja' }); break;
+          case 'tecleando': void acompanante.avisar({ tipo: 'tecleando' }); break;
+          case 'charla': {
+            // «@lyra …» en la caja: va al acompañante con lo que se está mirando, para que sepa de qué le hablan
+            const a = m.agente ? gestor.agentes.get(m.agente) : undefined;
+            const contexto = a ? `Está mirando la conversación «${a.titulo}» de ${NOMBRE_PROVEEDOR[a.proveedor]} (carpeta ${a.cwd}, estado: ${a.estado}). Lo último que dijo el agente: ${ultimoTexto(a.bloques, 1500) || '(nada todavía)'}` : '';
+            if (!acompanante.configurado || !await acompanante.avisar({ tipo: 'charla', texto: m.texto, contexto })) throw new Error('Lyra no está abierta: no recibió el mensaje.');
+            break;
+          }
           case 'crear': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.prompt }); cliente.agente = a.id; break; }
           case 'reanudar': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.texto, reanudar: m.sessionId }); cliente.agente = a.id; break; }
           case 'abrirSesion': { const bloques = await gestor.cargar(m.proveedor || 'claude', m.sessionId, m.cwd); emitir({ t: 'documento', agente: m.sessionId, bloques, soloLectura: true }); seguidor.mirar(ws, { proveedor: m.proveedor || 'claude', sessionId: m.sessionId, cwd: m.cwd }); break; }

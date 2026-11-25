@@ -10,6 +10,7 @@ import { MotorCodex, cargarCodex, historialCodex } from './codex.ts';
 import { instalado } from './motor.ts';
 import { sesionesLocales } from './local.ts';
 import { borrarSesion, renombrarSesion } from './papelera.ts';
+import { queDice, ultimoTexto, type Acompanante, type AvisoAgente } from './acompanante.ts';
 
 export type { Agente };
 const NOMBRES: Record<Proveedor, string> = { claude: 'Claude', codex: 'Codex', local: 'El agente local' };
@@ -20,6 +21,8 @@ export class GestorAgentes implements Contexto {
   emitir: (m: ServidorMensaje) => void;
   notificar: (id: string, titulo: string, texto: string) => void;
   mirando: (id: string) => boolean;
+  /** Opcional: otro programa que se entera de lo que pasa (ver acompanante.ts) */
+  acompanante?: Acompanante;
   constructor(emitir: (m: ServidorMensaje) => void, notificar: (id: string, titulo: string, texto: string) => void, mirando: (id: string) => boolean) {
     this.emitir = emitir; this.notificar = notificar; this.mirando = mirando;
   }
@@ -43,9 +46,22 @@ export class GestorAgentes implements Contexto {
     if ((estado === 'listo' || estado === 'error' || estado === 'cerrado') && a.progreso && !a.progreso.fin) a.progreso.fin = Date.now();
     if (estado === 'listo' && !this.mirando(a.id)) a.sinLeer = true;
     this.barra();
-    if (anterior !== estado && (estado === 'esperando' || estado === 'listo') && anterior !== 'iniciando') {
-      const pide = a.bloques.findLast(b => b.tipo === 'permiso' || b.tipo === 'pregunta' || b.tipo === 'plan');
-      this.notificar(a.id, a.titulo, estado === 'listo' ? `${NOMBRES[a.proveedor]} terminó` : pide?.tipo === 'pregunta' ? `${NOMBRES[a.proveedor]} te hizo una pregunta` : `${NOMBRES[a.proveedor]} necesita tu permiso`);
+    if (anterior === estado) return;
+    const base = { agente: a.id, proveedor: a.proveedor, titulo: a.titulo, cwd: a.cwd, mirando: this.mirando(a.id) };
+    // También al volver de un permiso: el acompañante sabe que ya se respondió (en la ventana o en su globo)
+    if (estado === 'trabajando') void this.acompanante?.avisar({ ...base, tipo: 'trabaja', texto: '' });
+    if (estado === 'error') {
+      const motivo = a.bloques.findLast(b => b.tipo === 'sistema' && b.nivel === 'error');
+      void this.acompanante?.avisar({ ...base, tipo: 'error', texto: motivo?.tipo === 'sistema' ? motivo.texto : '' });
+    }
+    if ((estado === 'esperando' || estado === 'listo') && anterior !== 'iniciando') {
+      const pide = a.bloques.findLast((b): b is Extract<Bloque, { tipo: 'permiso' | 'pregunta' | 'plan' }> => (b.tipo === 'permiso' || b.tipo === 'pregunta' || b.tipo === 'plan') && b.estado === 'pendiente');
+      const texto = estado === 'listo' ? `${NOMBRES[a.proveedor]} terminó` : pide?.tipo === 'pregunta' ? `${NOMBRES[a.proveedor]} te hizo una pregunta` : `${NOMBRES[a.proveedor]} necesita tu permiso`;
+      const aviso: AvisoAgente = estado === 'listo' || !pide ? { ...base, tipo: 'fin', texto: ultimoTexto(a.bloques) }
+        : { ...base, tipo: pide.tipo === 'pregunta' ? 'pregunta' : 'permiso', texto: queDice(pide), ...(pide.tipo === 'permiso' ? { solicitud: pide.id } : {}) };
+      // Si hay un acompañante que lo recibe, él te avisa: sin notificación del escritorio
+      if (!this.acompanante) this.notificar(a.id, a.titulo, texto);
+      else void this.acompanante.avisar(aviso).then(ok => { if (!ok) this.notificar(a.id, a.titulo, texto); });
     }
   }
   fallo(a: Agente, e: unknown) {

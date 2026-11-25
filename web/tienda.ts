@@ -53,6 +53,8 @@ export const estado = {
   memorias: new Map<string, { proveedores?: MemoriasProveedor[]; error?: string; pidiendo?: boolean }>(),
   /** Batería de la laptop (null: no hay o todavía no llegó) */
   bateria: null as Bateria | null,
+  /** El acompañante (Lyra, si está configurada): si hay uno y si está sentada en la caja de texto */
+  acompanante: { configurado: false, sentada: false, ancho: 0 },
   /** Terminales propias del panel del gato (viven en el servidor) */
   consolas: [] as Consola[],
 };
@@ -322,6 +324,7 @@ function recibir(m: ServidorMensaje) {
       break;
     }
     case 'bateria': estado.bateria = m.bateria; break;
+    case 'acompanante': estado.acompanante = { configurado: m.configurado, sentada: m.sentada, ancho: m.ancho }; break;
     case 'consolas': estado.consolas = m.consolas; break;
     case 'consolaDatos': oyentesConsola.get(m.id)?.(m.datos, m.completo); return;
     case 'archivoGuardado': { const k = claveArchivo(m.ruta, m.cwd); guardando.get(k)?.({ error: m.error, modificado: m.modificado }); guardando.delete(k); break; }

@@ -8,6 +8,9 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
   let valido = false;
   switch (m.t) {
     case 'hola': case 'historial': case 'catalogo': case 'soltar': valido = true; break;
+    case 'sinCaja': case 'tecleando': valido = true; break;
+    case 'caja': valido = ['x', 'y', 'ancho', 'alto', 'vw', 'vh'].every(k => typeof m[k] === 'number' && Number.isFinite(m[k]) && Math.abs(m[k] as number) < 100000); break;
+    case 'charla': valido = texto('texto') && !!(m.texto as string).trim() && (m.texto as string).length <= 20000 && texto('agente', true); break;
     case 'explorar': valido = texto('ruta') && (m.ruta as string).length <= 4096; break;
     case 'limites': valido = m.fresco === undefined || typeof m.fresco === 'boolean'; break;
     case 'foco': valido = typeof m.visible === 'boolean'; break;

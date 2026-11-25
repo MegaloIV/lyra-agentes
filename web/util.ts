@@ -89,8 +89,10 @@ export function modeloDe(proveedor: Proveedor | undefined, id?: string): { nombr
   // Sin elegir, Claude empieza con Opus (el servidor hace lo mismo: MODELO_NORMAL)
   if (!id && (proveedor === 'claude' || !proveedor)) id = 'claude-opus-5-5';
   // Claude informa «claude-haiku-5-5» aunque se haya elegido el alias «haiku»: también vale el mismo nombre
-  const modelo = lista.find(m => m.valor === (id ?? null)) || (id ? lista.find(m => m.valor && (id.startsWith(m.valor) || m.valor.startsWith(id)))
-    || (proveedor === 'claude' || !proveedor ? lista.find(m => m.valor && m.nombre === nombreModelo(id)) : undefined) : undefined);
+  // Primero el mismo nombre y después el prefijo: «claude-opus-5-5» empieza con «claude-opus-5» (Opus 5) y salía ese
+  const claude = proveedor === 'claude' || !proveedor;
+  const modelo = lista.find(m => m.valor === (id ?? null)) || (id ? (claude ? lista.find(m => m.valor && m.nombre === nombreModelo(id)) : undefined)
+    || lista.find(m => m.valor && (id.startsWith(m.valor) || m.valor.startsWith(id))) : undefined);
   return { nombre: modelo && modelo.valor ? modelo.nombre : id ? (proveedor === 'claude' || !proveedor ? nombreModelo(id) : id) : 'Predeterminado', modelo };
 }
 

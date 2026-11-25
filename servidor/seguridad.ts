@@ -8,6 +8,10 @@ export function validarConexion(token: string, recibido: string | null, origen: 
   const a = Buffer.from(token), b = Buffer.from(recibido || '');
   return a.length === 64 && b.length === a.length && timingSafeEqual(a, b) && origenes.includes(origen || '');
 }
+/** La API para otros programas locales: el mismo token; sin Origin vale (no es un navegador), con Origin, solo el propio */
+export function validarApi(token: string, recibido: string | null, origen: string | undefined, puerto: number, desarrollo = false): boolean {
+  return validarConexion(token, recibido, origen ?? `http://127.0.0.1:${puerto}`, puerto, desarrollo);
+}
 export async function cargarToken(base = join(homedir(), '.local/state/lyra-agentes')): Promise<string> {
   await mkdir(base, { recursive: true, mode: 0o700 }); await chmod(base, 0o700);
   const archivo = join(base, 'token');
