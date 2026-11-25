@@ -39,6 +39,8 @@ const trazos: Record<string, string> = {
   corriendo: 'M8 2.5a5.5 5.5 0 1 0 5.5 5.5',
   escudo: 'M8 2l5 2v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z',
   memoria: 'M5 2.5h6a1.5 1.5 0 0 1 1.5 1.5v9.5L8 11l-4.5 2.5V4A1.5 1.5 0 0 1 5 2.5z',
+  nota: 'M2.5 2.5h11v7l-4 4h-7z M13.5 9.5h-4v4 M5 5.5h6 M5 8h3.5',
+  ensanchar: 'M2.5 2.5h11v11h-11z M10 2.5v11 M7.5 5.5L5 8l2.5 2.5',
   tamanos: 'M2 8h12 M4.5 5.5L2 8l2.5 2.5 M11.5 5.5L14 8l-2.5 2.5 M2 3v10 M14 3v10',
 };
 

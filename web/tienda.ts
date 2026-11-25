@@ -1,13 +1,13 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub, MemoriasProveedor, Bateria, Consola } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub, MemoriasProveedor, Bateria, Consola, Nota } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
 /** `null`: un agente nuevo, todavía sin crear (se crea al mandar el primer mensaje) */
 export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string; proveedor?: Proveedor } | null;
 /** Con qué se crea el próximo agente; se recuerda entre sesiones */
 export type Borrador = { proveedor: Proveedor; modelo: string; esfuerzo: string; modo: PermissionMode; cwd: string };
-export type Panel = 'indice' | 'visor' | 'github' | 'memorias' | 'terminales' | 'consolas' | null;
+export type Panel = 'indice' | 'visor' | 'github' | 'memorias' | 'terminales' | 'consolas' | 'notas' | null;
 
 function leerLocal<T>(clave: string, defecto: T): T { try { const v = localStorage.getItem(clave); const datos = v ? JSON.parse(v) : {}; if (datos.proveedor && !['claude', 'codex', 'local'].includes(datos.proveedor)) return defecto; return { ...defecto, ...datos } as T; } catch { return defecto; } }
 export function guardarLocal(clave: string, valor: unknown) { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch {} }
@@ -29,6 +29,8 @@ export const estado = {
   /** Qué título se está renombrando: `agente:<id>` o `sesion:<sessionId>` */
   editando: null as string | null,
   grupos: { carpetas: [], sesiones: {} } as Grupos,
+  /** Notas del panel derecho (post-its), de la más nueva a la más vieja */
+  notas: [] as Nota[],
   borrador: leerLocal<Borrador>('lyra-borrador', { proveedor: 'claude', modelo: '', esfuerzo: '', modo: 'default', cwd: '' }),
   /** Panel de la derecha: índice, visor de archivos o cerrado */
   panel: leerLocal<{ v: Panel }>('lyra-panel', { v: 'indice' }).v,
@@ -177,6 +179,27 @@ export function ver(ruta: string, cwd: string) {
 }
 
 // Carpetas propias: se manda el estado entero y el servidor lo guarda y lo reparte
+/** Notas: el cambio se ve al instante y se guarda en el servidor medio segundo después de la última tecla */
+let guardadoNotas: ReturnType<typeof setTimeout> | undefined;
+function notas(n: Nota[], ya = false) {
+  estado.notas = n; avisar();
+  clearTimeout(guardadoNotas);
+  const mandar = () => { guardadoNotas = undefined; enviar({ t: 'guardarNotas', notas: estado.notas }); };
+  if (ya) mandar(); else guardadoNotas = setTimeout(mandar, 500);
+}
+export function crearNota(color: Nota['color'] = 'amarillo'): string {
+  const id = Math.random().toString(36).slice(2, 10);
+  notas([{ id, texto: '', color, fecha: Date.now() }, ...estado.notas], true);
+  return id;
+}
+export function cambiarNota(id: string, cambios: Partial<Pick<Nota, 'texto' | 'color'>>) {
+  notas(estado.notas.map(n => n.id === id ? { ...n, ...cambios, fecha: Date.now() } : n), !('texto' in cambios));
+}
+export function borrarNota(id: string) { notas(estado.notas.filter(n => n.id !== id), true); }
+/** Al salir de una nota o cerrar la ventana no se espera el medio segundo */
+export function guardarNotasYa() { if (guardadoNotas) notas(estado.notas, true); }
+addEventListener('pagehide', guardarNotasYa);
+
 function grupos(g: Grupos) { estado.grupos = g; avisar(); enviar({ t: 'guardarGrupos', grupos: g }); }
 export function crearCarpeta(nombre: string): string {
   const id = Math.random().toString(36).slice(2, 10);
@@ -282,6 +305,8 @@ function recibir(m: ServidorMensaje) {
       break;
     }
     case 'grupos': estado.grupos = m.grupos; break;
+    // Mientras se escribe (hay un guardado pendiente) manda lo de esta ventana: la copia que vuelve ya está vieja
+    case 'notas': if (!guardadoNotas) estado.notas = m.notas; break;
     case 'aplicaciones': estado.apps = { ruta: m.ruta, apps: m.apps }; break;
     case 'archivoBorrado': {
       estado.borrados.set(claveArchivo(m.ruta, m.cwd), m.id);

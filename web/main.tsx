@@ -11,6 +11,7 @@ import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Do
 import { Redactor } from './componentes/Redactor.tsx';
 import { Bateria, Reloj } from './componentes/Reloj.tsx';
 import { Visor, archivosDe } from './componentes/Visor.tsx';
+import { Notas } from './componentes/Notas.tsx';
 import { Github } from './componentes/Github.tsx';
 import { Memorias } from './componentes/Memorias.tsx';
 import { Consolas } from './componentes/Consolas.tsx';
@@ -138,6 +139,8 @@ function App() {
   const alternar = (p: Exclude<Panel, null>) => ponerPanel(panel === p ? null : p);
   useEffect(() => { if (angosto && estado.panel === 'visor' && estado.visor) setPanelAngosto('visor'); }, [estado.visor?.vez]);
   const [anchos, setAnchos] = useState<Anchos>(leerAnchos);
+  /** Panel al máximo permitido (en todas las pestañas), hasta volver a los tamaños de siempre o arrastrar el borde */
+  const [maximo, setMaximo] = useState(() => { try { return localStorage.getItem('lyra-panel-maximo') === '1'; } catch { return false; } });
   const [anchoBarra, setAnchoBarra] = useState(leerBarra);
   const [cajon, setCajon] = useState(false);
   const [entradas, setEntradas] = useState<{ lista: Entrada[]; activo: string }>({ lista: [], activo: '' });
@@ -177,6 +180,7 @@ function App() {
       const k = e.key.toLowerCase();
       // Dentro de una terminal las teclas son de la shell (Ctrl+R, Ctrl+K, Ctrl+T…), salvo la que alterna el panel
       if ((e.target as HTMLElement | null)?.closest?.('.consola') && !(e.ctrlKey && e.shiftKey && k === 't')) return;
+      if (e.ctrlKey && e.shiftKey && k === 'n') { e.preventDefault(); alternar('notas'); return; }
       if ((e.ctrlKey || e.altKey) && k === 'n') { e.preventDefault(); elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); return; }
       if (e.ctrlKey && k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('lyra-enfocar')); return; }
       if (e.ctrlKey && k === 'i') { e.preventDefault(); alternar('indice'); return; }
@@ -206,19 +210,28 @@ function App() {
     : v?.tipo === 'sesion' ? { proveedor, titulo, sessionId: v.sessionId, cwd } : undefined;
   // Un ancho guardado tampoco tapa el nombre: se vuelve a medir al cambiar de sesión, de título o de ventana
   const [tope, setTope] = useState(Infinity);
-  const ancho = panel ? Math.min(anchos[panel] ?? PANEL, angosto ? Infinity : tope) : 0;
+  // Sin conversación solo se muestran las notas (las demás pestañas son de una conversación)
+  const verPanel = !!panel && (!!v || panel === 'notas');
+  const base = panel ? anchos[panel] ?? PANEL : 0;
+  // Al máximo: el tope medido (mientras se mide, el ancho de siempre)
+  const ancho = !panel ? 0 : angosto ? base : maximo ? (Number.isFinite(tope) ? tope : base) : Math.min(base, tope);
   useLayoutEffect(() => {
-    if (!panel || angosto) return;
-    const medir = () => setTope(topePanel(ancho));
-    medir();
+    // Solo con el panel a la vista: oculto, el título tiene todo el ancho y el tope crecería sin fin
+    if (!verPanel || angosto) return;
+    setTope(topePanel(ancho));
+    // Al cambiar la ventana, el tope se vuelve a medir desde el ancho de siempre (al máximo, el título no deja espacio que medir)
+    const medir = () => maximo ? setTope(Infinity) : setTope(topePanel(ancho));
     window.addEventListener('resize', medir);
     return () => window.removeEventListener('resize', medir);
-  }, [panel, angosto, titulo, ancho, !!v]);
+  }, [panel, verPanel, angosto, titulo, ancho, !!v, maximo]);
+  // Al máximo, con o sin conversación la cabecera tiene otros botones: el tope se vuelve a medir desde el ancho de siempre
+  useLayoutEffect(() => { if (maximo) setTope(Infinity); }, [!!v, verPanel]);
 
   function arrastrarBorde(e: PointerEvent) {
     if (!panel || angosto) return;
     e.preventDefault();
-    const inicio = e.clientX, base = anchos[panel] ?? PANEL, p = panel, tope = topePanel(ancho);
+    const inicio = e.clientX, base = ancho, p = panel, tope = topePanel(ancho);
+    if (maximo) { setMaximo(false); guardarLocal('lyra-panel-maximo', 0); }
     let ultimo = base;
     const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + inicio - ev.clientX, 200), tope)); setAnchos(a => ({ ...a, [p]: ultimo })); };
     const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); setAnchos(a => { guardarLocal('lyra-anchos-propios', a); return a; }); document.body.classList.remove('arrastrando'); };
@@ -228,11 +241,22 @@ function App() {
 
   /** Botón de la barra: todo vuelve al ancho con que viene (barra y cada pestaña del panel) */
   function tamanosDeSiempre() {
-    setAnchoBarra(BARRA); setAnchos({});
-    try { localStorage.removeItem('lyra-barra'); localStorage.removeItem('lyra-anchos'); localStorage.removeItem('lyra-anchos-propios'); } catch { /* sin almacenamiento */ }
+    setAnchoBarra(BARRA); setAnchos({}); setMaximo(false);
+    try { for (const k of ['lyra-barra', 'lyra-anchos', 'lyra-anchos-propios', 'lyra-panel-maximo']) localStorage.removeItem(k); } catch { /* sin almacenamiento */ }
     mostrarError('Tamaños de siempre', 'info');
   }
-  function anchoDeSiempre(p: Exclude<Panel, null>) { setAnchos(a => { const n = { ...a }; delete n[p]; guardarLocal('lyra-anchos-propios', n); return n; }); }
+  function anchoDeSiempre(p: Exclude<Panel, null>) {
+    setMaximo(false); guardarLocal('lyra-panel-maximo', 0);
+    setAnchos(a => { const n = { ...a }; delete n[p]; guardarLocal('lyra-anchos-propios', n); return n; });
+  }
+  /** Un solo botón: si algo no está como siempre, lo restablece; si ya está como siempre, lleva el panel al máximo */
+  const deSiempre = !maximo && anchoBarra === BARRA && !Object.keys(anchos).length;
+  function alternarAncho() {
+    if (!deSiempre) { tamanosDeSiempre(); return; }
+    setMaximo(true); setTope(Infinity); guardarLocal('lyra-panel-maximo', 1);
+    if (!panel) ponerPanel(v ? 'indice' : 'notas');
+    mostrarError('Panel al máximo', 'info');
+  }
 
   function arrastrarBarra(e: PointerEvent) {
     if (matchMedia('(max-width: 760px)').matches) return;
@@ -245,24 +269,34 @@ function App() {
     window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
   }
 
+  // Abajo en la barra izquierda, sobre el uso: qué muestra el panel derecho y su ancho. Sin conversación abierta solo
+  // sirven las notas (las demás pestañas son de una conversación). En el cajón (ventana angosta) elegir una lo cierra
+  const pestana = (p: Exclude<Panel, null>) => () => { alternar(p); setCajon(false); };
+  const sinConv = !v;
   const botonesPanel = (
-    <div class="iconos-grupo">
-      <BotonIcono icono="indice" titulo="Índice (Ctrl+I)" activo={panel === 'indice'} onClick={() => alternar('indice')} />
-      <BotonIcono icono="visor" titulo={hayNuevos ? 'Visor: hay archivos nuevos (Ctrl+O)' : 'Visor de archivos e imágenes (Ctrl+O)'} activo={panel === 'visor'} data-nuevo={hayNuevos ? 'true' : undefined} onClick={() => alternar('visor')} />
-      <BotonIcono icono="rama" titulo="GitHub: cambios, PR, pruebas e issues de esta carpeta (Ctrl+G)" activo={panel === 'github'} onClick={() => alternar('github')} />
-      <button type="button" class="icono-boton terminales-pestana" aria-label="Terminales" aria-pressed={panel === 'terminales'} onClick={() => alternar('terminales')}>
+    <nav class="barra-paneles" aria-label="Panel de la derecha">
+      <BotonIcono icono="indice" titulo="Índice (Ctrl+I)" activo={panel === 'indice'} disabled={sinConv} onClick={pestana('indice')} />
+      <BotonIcono icono="visor" titulo={hayNuevos ? 'Visor: hay archivos nuevos (Ctrl+O)' : 'Visor de archivos e imágenes (Ctrl+O)'} activo={panel === 'visor'} disabled={sinConv} data-nuevo={hayNuevos ? 'true' : undefined} onClick={pestana('visor')} />
+      <BotonIcono icono="rama" titulo="GitHub: cambios, PR, pruebas e issues de esta carpeta (Ctrl+G)" activo={panel === 'github'} disabled={sinConv} onClick={pestana('github')} />
+      <button type="button" class="icono-boton terminales-pestana" aria-label="Terminales (Ctrl+T)" aria-pressed={panel === 'terminales'} disabled={sinConv} onClick={pestana('terminales')}>
         <Icono nombre="terminal" />{(() => { const n = comandosTerminal(doc?.bloques || []).filter(corriendoTerminal).length; return n > 0 && <span class="terminales-contador">{n}</span>; })()}
       </button>
-      <BotonIcono icono="memoria" titulo="Memorias de Claude, Codex y el local (Ctrl+M)" activo={panel === 'memorias'} onClick={() => alternar('memorias')} />
-      <button type="button" class="icono-boton terminales-pestana" aria-label="Mis terminales (Ctrl+Shift+T)" aria-pressed={panel === 'consolas'} onClick={() => alternar('consolas')}>
+      <BotonIcono icono="memoria" titulo="Memorias de Claude, Codex y el local (Ctrl+M)" activo={panel === 'memorias'} disabled={sinConv} onClick={pestana('memorias')} />
+      <button type="button" class="icono-boton terminales-pestana" aria-label="Mis terminales (Ctrl+Shift+T)" aria-pressed={panel === 'consolas'} disabled={sinConv} onClick={pestana('consolas')}>
         <Icono nombre="gato" />{(() => { const n = estado.consolas.filter(c => c.cwd === cwd && c.viva).length; return n > 0 && <span class="terminales-contador">{n}</span>; })()}
       </button>
-    </div>
+      <button type="button" class="icono-boton terminales-pestana" aria-label="Notas (Ctrl+Shift+N)" aria-pressed={panel === 'notas'} onClick={pestana('notas')}>
+        <Icono nombre="nota" />{estado.notas.length > 0 && <span class="terminales-contador">{estado.notas.length}</span>}
+      </button>
+      <span class="barra-paneles-separador" aria-hidden="true" />
+      <BotonIcono icono={deSiempre ? 'ensanchar' : 'tamanos'} clase="barra-ancho" activo={maximo}
+        titulo={deSiempre ? 'Panel de la derecha al máximo' : 'Volver a los tamaños de siempre (barra izquierda y panel de la derecha)'} onClick={alternarAncho} />
+    </nav>
   );
 
   return (
-    <div id="app" class="lyra" data-panel={v && panel ? panel : 'oculto'} style={{ '--panel': `${ancho}px`, '--barra': `${anchoBarra}px` } as Record<string, string>}>
-      <Barra abierta={cajon} onBorde={arrastrarBarra} onBordeDoble={() => { setAnchoBarra(BARRA); guardarLocal('lyra-barra', BARRA); }} onTamanos={tamanosDeSiempre} onNuevo={() => { elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); }} onCerrarCajon={() => setCajon(false)} />
+    <div id="app" class="lyra" data-panel={verPanel ? panel : 'oculto'} style={{ '--panel': `${ancho}px`, '--barra': `${anchoBarra}px` } as Record<string, string>}>
+      <Barra abierta={cajon} onBorde={arrastrarBarra} onBordeDoble={() => { setAnchoBarra(BARRA); guardarLocal('lyra-barra', BARRA); }} paneles={botonesPanel} onNuevo={() => { elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); }} onCerrarCajon={() => setCajon(false)} />
       <main class="lectura">
         {estado.rechazado ? (
           <div class="vacio">
@@ -286,7 +320,6 @@ function App() {
                   <BotonIcono icono="copiar" titulo="Copiar como Markdown" onClick={() => void navigator.clipboard.writeText(exportar()).then(() => mostrarError('Conversación copiada como Markdown', 'info'))} />
                 </div>
               )}
-              {v && botonesPanel}
               {v && <Bateria />}
               {v && <Reloj />}
             </header>
@@ -310,11 +343,11 @@ function App() {
           <div class="errores" role="alert">{estado.errores.map(e => <p key={e.id} data-nivel={e.nivel}>{e.texto}</p>)}</div>
         )}
       </main>
-      {v && panel && (
+      {verPanel && (
         <aside class="panel" data-modo={panel}>
           <div class="panel-borde" onPointerDown={arrastrarBorde} onDblClick={() => anchoDeSiempre(panel)} />
           <header class="panel-cabecera">
-            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : panel === 'terminales' ? 'Terminales' : panel === 'consolas' ? 'Mis terminales' : panel === 'memorias' ? 'Memorias' : 'Visor'}</span>
+            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : panel === 'terminales' ? 'Terminales' : panel === 'consolas' ? 'Mis terminales' : panel === 'memorias' ? 'Memorias' : panel === 'notas' ? 'Notas' : 'Visor'}</span>
             <BotonIcono icono="cerrar" titulo="Cerrar el panel" onClick={() => ponerPanel(null)} />
           </header>
           <div class="panel-cuerpo">
@@ -324,12 +357,13 @@ function App() {
               : panel === 'terminales' ? <Terminales key={claveDoc} bloques={doc?.bloques || []} />
               : panel === 'memorias' ? <Memorias cwd={cwd} proveedor={proveedor} />
               : panel === 'consolas' ? <Consolas cwd={cwd} />
+              : panel === 'notas' ? <Notas />
               : <Visor bloques={doc?.bloques || []} cwd={cwd} />}
           </div>
         </aside>
       )}
       {cajon && <div class="cortina" onClick={() => setCajon(false)} />}
-      {angosto && panelAngosto && v && <div class="cortina cortina-indice" onClick={() => setPanelAngosto(null)} />}
+      {angosto && panelAngosto && verPanel && <div class="cortina cortina-indice" onClick={() => setPanelAngosto(null)} />}
     </div>
   );
 }

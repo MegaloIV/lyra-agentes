@@ -50,7 +50,9 @@ lyra-agentes --instalar  # la agrega al menú de aplicaciones
 
 **Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. El agente local no tiene límites.
 
-Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub, Ctrl+M memorias, Ctrl+T terminales y Shift+Tab siguiente modo de permisos.
+**Panel de la derecha:** sus pestañas están abajo en la barra izquierda, sobre el uso: índice, visor, GitHub, terminales del agente, memorias, tus terminales y notas (post-its que se guardan solos y se ven en todas las conversaciones). El último botón de esa fila cambia el ancho: si algo no está en su tamaño de siempre lo restablece; si ya lo está, lleva el panel al máximo.
+
+Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub, Ctrl+M memorias, Ctrl+T terminales, Ctrl+Shift+T tus terminales, Ctrl+Shift+N notas y Shift+Tab siguiente modo de permisos.
 
 ## Agente local (Ollama)
 

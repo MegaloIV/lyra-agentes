@@ -24,6 +24,7 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'gitDiff': valido = texto('cwd') && !!m.cwd && texto('ruta', true) && texto('commit', true) && (!!m.ruta !== !!m.commit); break;
     case 'registroPrueba': valido = texto('cwd') && !!m.cwd && Number.isSafeInteger(m.run) && (m.run as number) > 0 && (m.job === undefined || Number.isSafeInteger(m.job) && (m.job as number) > 0); break;
     case 'guardarGrupos': valido = m.grupos !== null && typeof m.grupos === 'object'; break;
+    case 'guardarNotas': valido = Array.isArray(m.notas) && m.notas.length <= 300; break;
     case 'enviar': valido = texto('agente') && texto('texto'); break;
     case 'interrumpir': case 'cerrar': case 'leer': case 'comandos': valido = texto('agente'); break;
     case 'modelo': valido = texto('agente') && (m.modelo === null || texto('modelo')); break;

@@ -99,6 +99,17 @@ button { cursor: pointer; }
 }
 .boton-nuevo:hover { background: rgba(184, 224, 74, .2); }
 
+/* Sobre el uso: las pestañas del panel derecho y el botón de su ancho (restablecer / al máximo) */
+.barra-paneles {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: .1rem;
+  border-top: 1px solid var(--borde); margin: 0 -.5rem; padding: .35rem .6rem;
+}
+.barra-paneles .icono-boton { width: 1.75rem; height: 1.75rem; }
+.barra-paneles .icono-boton:disabled { opacity: .35; cursor: default; background: none; color: var(--tenue); }
+.barra-paneles .icono-boton[data-nuevo="true"]::after { box-shadow: 0 0 0 2px var(--fondo-hondo); }
+.barra-paneles-separador { flex: none; width: 1px; height: 1.1rem; background: var(--borde); }
+.barra-paneles .terminales-contador { background: var(--fondo-hondo); }
+
 /* Límites de uso, abajo: una fila por proveedor con la ventana de 5 h y la semanal */
 .limites {
   flex: none; border-top: 1px solid var(--borde);
@@ -1271,3 +1282,37 @@ details.cuadro[open] > .cuadro-cabecera .carpeta-flecha::before, .cuadro[data-ab
 .uso-renueva { grid-column: 1 / -1; margin-top: -.2rem; font-size: .76rem; color: var(--tenue); }
 .comando-salida[data-clase="uso"] .comando-texto { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--borde); color: var(--apagado); }
 @media (max-width: 560px) { .uso-fila { grid-template-columns: 1fr 3rem; } .uso-barra { grid-column: 1 / -1; grid-row: 2; } }
+
+/* ───────── Notas (post-its) ───────── */
+.notas { display: flex; flex-direction: column; gap: .6rem; padding: .2rem 0 1rem; }
+.notas .consolas-barra { padding-bottom: 0; }
+.nota {
+  --c: var(--amarillo);
+  margin: 0 .8rem; border-radius: var(--radio-chico);
+  background: color-mix(in srgb, var(--c) 13%, var(--superficie));
+  border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+  border-top: 3px solid var(--c);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+}
+.nota[data-color="lima"], .nota-color[data-color="lima"] { --c: var(--lima); }
+.nota[data-color="azul"], .nota-color[data-color="azul"] { --c: var(--azul); }
+.nota[data-color="violeta"], .nota-color[data-color="violeta"] { --c: var(--violeta); }
+.nota[data-color="rojo"], .nota-color[data-color="rojo"] { --c: var(--rojo); }
+.nota-texto {
+  display: block; width: 100%; min-height: 3.2rem; resize: none; overflow: hidden;
+  border: 0; background: none; color: var(--texto); padding: .6rem .7rem .3rem;
+  font: inherit; font-size: .86rem; line-height: 1.45;
+}
+.nota-texto:focus { outline: none; }
+.nota-texto::placeholder { color: var(--tenue); }
+.nota-pie { display: flex; align-items: center; gap: .4rem; padding: 0 .3rem .25rem .7rem; }
+.nota-colores { display: flex; gap: .3rem; }
+.nota-color {
+  --c: var(--amarillo);
+  width: .8rem; height: .8rem; padding: 0; border-radius: 50%; cursor: pointer;
+  background: var(--c); border: 2px solid transparent; opacity: .55;
+}
+.nota-color:hover, .nota-color[aria-pressed="true"] { opacity: 1; }
+.nota-color[aria-pressed="true"] { border-color: var(--texto-fuerte); }
+.nota-fecha { flex: 1; text-align: right; font-size: .7rem; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nota .nota-borrar { width: 1.6rem; height: 1.6rem; }

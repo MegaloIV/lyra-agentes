@@ -17,6 +17,7 @@ import { vigilarBateria } from './bateria.ts';
 import type { Bateria } from './protocolo.ts';
 import { borrarArchivo } from './papelera.ts';
 import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
+import { guardarNotas, leerNotas } from './notas.ts';
 import { avisarCuota, cerrarCodex, limiteCodex, rutaCodex } from './codex.ts';
 import { SeguidorSesiones } from './seguir.ts';
 import { avisarUsoClaude, comandosClaude } from './claude.ts';
@@ -101,7 +102,7 @@ servidor.on('upgrade', (req, socket, head) => {
       try {
         const m = validarMensaje(JSON.parse(datos.toString())), cliente = clientes.get(ws)!;
         switch (m.t) {
-          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); enviar(ws, { t: 'bateria', bateria: ultimaBateria }); enviar(ws, { t: 'consolas', consolas: consolas.resumen() }); break;
+          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); enviar(ws, { t: 'notas', notas: await leerNotas() }); enviar(ws, { t: 'bateria', bateria: ultimaBateria }); enviar(ws, { t: 'consolas', consolas: consolas.resumen() }); break;
           case 'foco': cliente.visible = m.visible; cliente.fecha = Date.now(); break;
           case 'crear': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.prompt }); cliente.agente = a.id; break; }
           case 'reanudar': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, prompt: m.texto, reanudar: m.sessionId }); cliente.agente = a.id; break; }
@@ -150,6 +151,7 @@ servidor.on('upgrade', (req, socket, head) => {
           }
           case 'registroPrueba': enviar(ws, { t: 'registroPrueba', cwd: m.cwd, texto: await registroPrueba(m.cwd, m.run, m.job) }); break;
           case 'guardarGrupos': emitir({ t: 'grupos', grupos: await guardarGrupos(m.grupos) }); break;
+          case 'guardarNotas': emitir({ t: 'notas', notas: await guardarNotas(m.notas) }); break;
           case 'historial': emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'borrar': {
             const r = await gestor.borrar(m);

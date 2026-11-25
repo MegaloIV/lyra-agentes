@@ -44,6 +44,9 @@ export type Ventana = { tipo: 'corta' | 'larga'; nombre: string; usado: number; 
 /** Cuánto le queda a cada proveedor; sin ventanas, `nota` dice por qué (sin sesión, no lo informa…) */
 export type Limite = { proveedor: Proveedor; plan?: string; ventanas: Ventana[]; nota?: string };
 /** Carpetas propias del usuario y en cuál está cada sesión (`sessionId` → id de carpeta) */
+/** Notas del panel derecho (post-its) */
+export const COLORES_NOTA = ['amarillo', 'lima', 'azul', 'violeta', 'rojo'] as const;
+export type Nota = { id: string; texto: string; color: typeof COLORES_NOTA[number]; fecha: number };
 export type Grupos = { carpetas: { id: string; nombre: string; abierta: boolean }[]; sesiones: Record<string, string> };
 /** Pestaña GitHub. `estado`: M modificado, A nuevo en el índice, D borrado, R renombrado, U en conflicto, ? sin seguimiento */
 export type CambioGit = { ruta: string; estado: 'M' | 'A' | 'D' | 'R' | 'U' | '?'; preparado: boolean };
@@ -87,6 +90,7 @@ export type ClienteMensaje =
   /** Manda un archivo del visor a la papelera (`id`: el bloque que lo nombró, para dejar de listarlo) */
   | { t: 'borrarArchivo'; ruta: string; cwd?: string; id?: string }
   | { t: 'guardarGrupos'; grupos: Grupos }
+  | { t: 'guardarNotas'; notas: Nota[] }
   /** Pestaña GitHub: el estado de git de `cwd` y, con `red`, también lo de GitHub */
   | { t: 'git'; cwd: string; red?: boolean }
   | { t: 'memorias'; cwd: string }
@@ -127,6 +131,7 @@ export type ServidorMensaje =
   | { t: 'archivoBorrado'; ruta: string; cwd?: string; id?: string }
   | { t: 'enfocar'; agente: string }
   | { t: 'grupos'; grupos: Grupos }
+  | { t: 'notas'; notas: Nota[] }
   | { t: 'git'; cwd: string; git?: EstadoGit; error?: string }
   | { t: 'memorias'; cwd: string; proveedores?: MemoriasProveedor[]; error?: string }
   | { t: 'github'; cwd: string; github: InfoGithub }

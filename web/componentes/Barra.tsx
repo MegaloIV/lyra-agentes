@@ -118,7 +118,7 @@ function Fila({ s, onElegir, enProyecto = false }: { s: Sesion; onElegir: () => 
   );
 }
 
-export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, onTamanos }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void; onBorde: (e: PointerEvent) => void; onBordeDoble: () => void; onTamanos: () => void }) {
+export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, paneles }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void; onBorde: (e: PointerEvent) => void; onBordeDoble: () => void; paneles: preact.ComponentChildren }) {
   const [filtro, setFiltro] = useState<Proveedor | ''>('');
   const [busqueda, setBusqueda] = useState('');
   const [plegado, setPlegado] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem(PLEGADO) || '{}'); } catch { return {}; } });
@@ -158,7 +158,6 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
       <div class="barra-borde" onPointerDown={onBorde} onDblClick={onBordeDoble} />
       <header class="agentes-cabecera">
         <span class="marca">Lyra</span>
-        <BotonIcono icono="tamanos" titulo="Volver a los tamaños de siempre (barra izquierda y paneles de la derecha)" onClick={onTamanos} />
         <BotonIcono icono="carpetaNueva" titulo="Nueva carpeta" onClick={() => { const id = crearCarpeta('Nueva carpeta'); estado.editando = `carpeta:${id}`; avisar(); }} />
         <BotonIcono icono="nuevo" titulo="Agente nuevo (Alt+N)" clase="icono-boton-lima" aria-current={v === null ? 'true' : undefined} onClick={onNuevo} />
       </header>
@@ -251,6 +250,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
       )}
       {(q || filtro) && !agentes.length && !proyectos.length && ![...porCarpeta.values()].some(l => l.length) && <p class="historial-vacio">Nada coincide.</p>}
       </div>
+      {paneles}
       <Limites />
     </aside>
   );
