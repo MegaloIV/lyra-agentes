@@ -786,8 +786,9 @@ body.arrastrando iframe { pointer-events: none; }
   padding: .28rem .55rem; font-size: .82rem; outline: 0;
 }
 .buscador-campo:focus { border-color: rgba(184, 224, 74, .45); }
-.buscador-proveedor { flex: none; display: grid; place-items: center; width: 1.35rem; height: 1.35rem; border: 1px solid transparent; border-radius: 50%; background: none; opacity: .45; }
-.buscador-proveedor .proveedor-punto { margin: 0; }
+.buscador-proveedor { flex: none; position: relative; width: 20px; height: 20px; padding: 0; border: 1px solid transparent; border-radius: 50%; background: none; opacity: .45; line-height: 0; }
+/* Medidas enteras y centrado absoluto: el punto cae justo en el medio del aro */
+.buscador-proveedor .proveedor-punto { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: 0; transform: translate(-50%, -50%); }
 .buscador-proveedor:hover { opacity: .8; }
 .buscador-proveedor[aria-pressed="true"] { opacity: 1; border-color: var(--prov); }
 .agente-acciones { flex: none; display: flex; gap: 0; align-items: center; }
@@ -1028,6 +1029,29 @@ html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra));
 .reloj-grande .reloj-fecha { font-size: clamp(.9rem, 1.6vw, 1.1rem); letter-spacing: .04em; }
 @media (max-width: 760px) { .lectura-cabecera > .reloj .reloj-fecha { display: none; } }
 
+/* Batería de la laptop: al lado del reloj y debajo del grande */
+.bateria { display: inline-flex; align-items: center; gap: .3rem; flex: none; color: var(--apagado); font: 500 .78rem var(--letra); font-variant-numeric: tabular-nums; white-space: nowrap; user-select: none; }
+.lectura-cabecera > .bateria { padding-left: .7rem; margin-left: .1rem; border-left: 1px solid var(--borde); }
+.bateria-carga { fill: currentColor; }
+.bateria[data-nivel="media"] { color: var(--amarillo); }
+.bateria[data-nivel="baja"] { color: var(--rojo); }
+.bateria[data-cargando] .bateria-carga { fill: var(--lima); }
+.bateria[data-cargando] { color: var(--texto); }
+.bateria-rayo { fill: var(--texto-fuerte); stroke: var(--fondo); stroke-width: .7; }
+.bateria-grande { margin-top: .6rem; gap: .45rem; font-size: .95rem; opacity: .75; }
+.bateria-grande small { font-size: .85rem; color: var(--tenue); font-weight: 400; }
+
+/* Editar un .md en el visor */
+.visor-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.visor-editor-barra { display: flex; align-items: center; gap: .4rem; padding: .45rem .6rem; border-bottom: 1px solid var(--borde); }
+.visor-editor-estado { flex: 1; min-width: 0; font-size: .74rem; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.visor-guardar:not(:disabled) { color: var(--lima); border-color: rgba(184, 224, 74, .5); }
+.visor-editor-texto {
+  flex: 1; min-height: 0; width: 100%; resize: none; border: 0; outline: 0; margin: 0;
+  padding: .9rem 1rem 2rem; background: var(--fondo); color: var(--texto-fuerte);
+  font: .82rem/1.6 var(--mono); tab-size: 2; white-space: pre-wrap;
+}
+
 /* ───────── Borde de la barra izquierda y ficha al arrastrar una conversación ───────── */
 .barra-borde { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
 .barra-borde:hover, body.arrastrando .barra-borde { background: linear-gradient(to right, transparent 4px, var(--lima) 4px, var(--lima) 6px, transparent 6px); opacity: .6; }
@@ -1060,6 +1084,7 @@ html[data-ventana] .agentes { background: rgb(23 24 22 / var(--opacidad-barra));
   flex: 1; min-width: 0; display: flex; align-items: center; gap: .6rem; text-align: left; text-decoration: none;
   border: 0; background: none; padding: .32rem .6rem; border-radius: var(--radio-chico); color: var(--texto); cursor: pointer;
 }
+.git-fila > svg { flex: none; color: var(--azul); }   /* sin esto el ícono se encoge con un texto largo */
 .git-fila-texto { min-width: 0; display: flex; flex-direction: column; }
 .git-fila-texto span { font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .git-fila-texto small { font-size: .71rem; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1122,7 +1147,7 @@ a.git-prueba-nombre:hover { color: var(--azul); }
   display: inline-flex; align-items: center; font: 500 .76rem var(--letra); color: var(--apagado);
   background: none; border: 1px solid transparent; border-radius: 99px; padding: .15rem .55rem; cursor: pointer;
 }
-.mem-proveedor .proveedor-punto { margin-right: .35rem; }
+.mem-proveedor .proveedor-punto { margin: 0 .35rem 0 0; vertical-align: 0; }
 .mem-proveedor:hover { color: var(--texto); background: var(--superficie); }
 .mem-proveedor[aria-pressed="true"] { color: var(--prov); border-color: color-mix(in srgb, var(--prov) 45%, transparent); }
 .mem-otro > summary { cursor: pointer; list-style: none; padding-top: .2rem; padding-bottom: .2rem; margin: 0; }
@@ -1132,17 +1157,48 @@ a.git-prueba-nombre:hover { color: var(--azul); }
 .mem-otro > summary:hover { color: var(--texto); }
 .mem-otro-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Comandos de terminal */
-.terminales { padding: 14px; }
-.terminal-comando { border: 1px solid var(--borde); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
-.terminal-resumen { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px; text-align: left; background: transparent; color: inherit; border: 0; cursor: pointer; }
-.terminal-resumen code { white-space: pre-wrap; overflow-wrap: anywhere; }
-.terminal-carpeta, .terminal-estado { font-size: 12px; overflow-wrap: anywhere; opacity: .75; }
-.terminal-acciones { display: flex; gap: 12px; padding: 0 12px 10px; }
-.terminal-acciones button { font: inherit; font-size: 12px; color: inherit; background: transparent; border: 0; cursor: pointer; }
-.terminal-acciones button:disabled { opacity: .4; cursor: default; }
-.terminal-salida { margin: 0; padding: 12px; max-height: 360px; overflow: auto; font-size: 12px; white-space: pre; border-top: 1px solid var(--borde); }
-.terminal-punto { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; animation: terminal-pulso 1s infinite alternate; }
+/* Cuadros del panel derecho (Memorias, Archivos, Terminales): como las carpetas de la barra izquierda */
+.cuadro {
+  border: 1px solid color-mix(in srgb, var(--texto-fuerte) 45%, transparent);
+  background: var(--superficie);
+  border-radius: var(--radio); padding: .1rem .15rem; margin: 0 .6rem .4rem;
+}
+.cuadro-cabecera {
+  display: flex; align-items: center; gap: .4rem; width: 100%; padding: .3rem .5rem; margin: 1px 0;
+  font: .84rem var(--letra); color: var(--texto); text-align: left; background: none; border: 0;
+  cursor: pointer; user-select: none; list-style: none; border-radius: calc(var(--radio) - 3px);
+}
+.cuadro-cabecera::-webkit-details-marker { display: none; }
+.cuadro-cabecera:hover { background: var(--superficie-2); }
+.cuadro-cabecera > svg { flex: none; color: var(--amarillo); }
+.cuadro-nombre { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+details.cuadro[open] > .cuadro-cabecera .carpeta-flecha::before, .cuadro[data-abierto] > .cuadro-cabecera .carpeta-flecha::before { transform: rotate(90deg); }
+.cuadro-lista { list-style: none; margin: 0; padding: 0 0 .15rem .7rem; }
+.cuadro-lista li { display: flex; align-items: center; gap: .2rem; border-radius: var(--radio-chico); }
+.cuadro-lista li:hover { background: var(--superficie-2); }
+.cuadros-titulo { margin-top: .8rem; }
+.mem .git-rama { margin-bottom: .6rem; }
+.mem > .git-nota { margin-bottom: .5rem; }
+.visor-lista { padding-top: .2rem; }
+.visor-lista .cuadro-lista li .visor-archivo { padding: .32rem .5rem; }
+.visor-lista .cuadro-lista li:hover { background: var(--superficie-2); }
+.visor-archivo-texto small { text-transform: none; }
+
+/* Comandos de terminal: un cuadro desplegable por comando */
+.terminales { padding: .2rem 0 1rem; }
+.terminal-resumen { gap: .45rem; }
+.terminal-icono { flex: none; display: grid; place-items: center; width: .9rem; height: .9rem; }
+.terminal-comando[data-estado="ok"] .terminal-icono { color: var(--lima); }
+.terminal-comando[data-estado="error"] .terminal-icono { color: var(--rojo); }
+.terminal-comando[data-estado="corriendo"] .terminal-icono { color: var(--amarillo); }
+.terminal-titulo { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.terminal-duracion { flex: none; font: .72rem var(--mono); color: var(--tenue); }
+.terminal-detalle { padding: .1rem .45rem .5rem; display: flex; flex-direction: column; gap: .4rem; }
+.terminal-codigo { margin: 0; padding: .45rem .6rem; font: .76rem/1.45 var(--mono); color: var(--texto-fuerte); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--fondo); border: 1px solid var(--borde); border-radius: var(--radio-chico); }
+.terminal-datos { margin: 0; font-size: .72rem; color: var(--tenue); overflow-wrap: anywhere; }
+.terminal-salida { margin: 0; padding: .45rem .6rem; max-height: 340px; overflow: auto; font: .74rem/1.45 var(--mono); white-space: pre; background: #151614; border: 1px solid var(--borde); border-radius: var(--radio-chico); }
+.terminal-acciones { display: flex; gap: .4rem; flex-wrap: wrap; }
+.terminal-punto { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: terminal-pulso 1s infinite alternate; }
 .terminales-pestana { position: relative; }
 .terminales-contador { position: absolute; top: -4px; right: -4px; font-size: 10px; border-radius: 8px; padding: 0 4px; background: var(--fondo); color: inherit; }
 @keyframes terminal-pulso { to { opacity: .25; } }

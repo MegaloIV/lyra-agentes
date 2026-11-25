@@ -9,7 +9,7 @@ import { Icono } from './componentes/iconos.tsx';
 import { Barra } from './componentes/Barra.tsx';
 import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Documento.tsx';
 import { Redactor } from './componentes/Redactor.tsx';
-import { Reloj } from './componentes/Reloj.tsx';
+import { Bateria, Reloj } from './componentes/Reloj.tsx';
 import { Visor, archivosDe } from './componentes/Visor.tsx';
 import { Github } from './componentes/Github.tsx';
 import { Memorias } from './componentes/Memorias.tsx';
@@ -100,17 +100,17 @@ function guardarArchivo(nombre: string, texto: string) {
 }
 const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
 
-/** Ancho del panel derecho: el mismo para todas las pestañas. Si arrastras el borde, esa pestaña guarda el suyo
+/** Ancho de la barra de la izquierda (en px); se cambia arrastrando su borde derecho */
+const BARRA = 272;
+function leerBarra(): number { try { const n = Number(localStorage.getItem('lyra-barra')); return n >= 200 && n <= 520 ? n : BARRA; } catch { return BARRA; } }
+
+/** Ancho del panel derecho: el mismo para todas las pestañas e igual al de la barra izquierda. Si arrastras el borde, esa pestaña guarda el suyo
  *  hasta el botón «tamaños de siempre» (o doble clic en el borde) */
-const PANEL = 420;
+const PANEL = BARRA;
 type Anchos = Partial<Record<Exclude<Panel, null>, number>>;
 function leerAnchos(): Anchos {
   try { const a = JSON.parse(localStorage.getItem('lyra-anchos-propios') || '{}'); return a && typeof a === 'object' ? a : {}; } catch { return {}; }
 }
-
-/** Ancho de la barra de la izquierda (en px); se cambia arrastrando su borde derecho */
-const BARRA = 272;
-function leerBarra(): number { try { const n = Number(localStorage.getItem('lyra-barra')); return n >= 200 && n <= 520 ? n : BARRA; } catch { return BARRA; } }
 
 /** Archivos ya vistos por conversación, para el punto del visor y para abrirlo solo con una imagen nueva */
 const vistos = new Map<string, Set<string>>();
@@ -265,6 +265,7 @@ function App() {
                 </div>
               )}
               {v && botonesPanel}
+              {v && <Bateria />}
               {v && <Reloj />}
             </header>
             {!estado.conectado && <div class="desconectado">Sin conexión con el servidor… reintentando</div>}
@@ -276,6 +277,7 @@ function App() {
                 <div class="portada">
                   <div class="marca-grande" aria-hidden="true">LYRA</div>
                   <Reloj grande />
+                  <Bateria grande />
                 </div>
               </div>
             )}

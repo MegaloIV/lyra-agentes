@@ -9,7 +9,7 @@ import { PROVEEDORES, haceCuanto } from '../util.ts';
 
 function Grupo({ g, cwd }: { g: GrupoMemoria; cwd: string }) {
   const lista = (
-    <ul class="git-lista">
+    <ul class="git-lista cuadro-lista">
       {g.archivos.map(a => (
         <li key={a.ruta}>
           <button type="button" class="git-fila" title={`${a.ruta}\nCambió ${haceCuanto(a.modificado)}`} onClick={() => ver(a.ruta, cwd)}>
@@ -20,17 +20,12 @@ function Grupo({ g, cwd }: { g: GrupoMemoria; cwd: string }) {
       ))}
     </ul>
   );
-  if (g.alcance === 'otro') return (
-    <details class="mem-otro">
-      <summary class="panel-titulo git-titulo"><span class="mem-otro-nombre">{g.titulo}</span><span class="git-cantidad">{g.archivos.length}</span></summary>
+  // Cada grupo en su cuadro desplegable, como las carpetas de la barra izquierda; los de otros proyectos, cerrados
+  return (
+    <details class="cuadro" open={g.alcance !== 'otro'}>
+      <summary class="cuadro-cabecera"><span class="carpeta-flecha" aria-hidden="true" /><span class="cuadro-nombre">{g.titulo}</span><span class="git-cantidad">{g.archivos.length}</span></summary>
       {lista}
     </details>
-  );
-  return (
-    <section class="git-seccion">
-      <h3 class="panel-titulo git-titulo">{g.titulo}<span class="git-cantidad">{g.archivos.length}</span></h3>
-      {lista}
-    </section>
   );
 }
 
@@ -59,12 +54,8 @@ export function Memorias({ cwd, proveedor }: { cwd: string; proveedor: Proveedor
       {p?.nota && <p class="git-nota">{p.nota}</p>}
       {!propios.length && <p class="git-nota">Nada guardado para esta carpeta.</p>}
       {propios.map(g => <Grupo key={g.titulo} g={g} cwd={cwd} />)}
-      {otros.length > 0 && (
-        <section class="git-seccion">
-          <h3 class="panel-titulo git-titulo">De otros proyectos<span class="git-cantidad">{otros.length}</span></h3>
-          {otros.map(g => <Grupo key={g.titulo} g={g} cwd={cwd} />)}
-        </section>
-      )}
+      {otros.length > 0 && <h3 class="panel-titulo git-titulo cuadros-titulo">De otros proyectos<span class="git-cantidad">{otros.length}</span></h3>}
+      {otros.map(g => <Grupo key={g.titulo} g={g} cwd={cwd} />)}
     </div>
   );
 }

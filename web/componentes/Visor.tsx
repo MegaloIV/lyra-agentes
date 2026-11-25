@@ -1,9 +1,9 @@
 // Visor del panel derecho: los archivos que el agente creó, editó, generó o nombró, y la vista de uno.
 // Muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas (pasadas a PDF con LibreOffice),
 // HTML (sin scripts) y código. «Abrir con…» elige otra app (OnlyOffice, VS Code…). La papelera lo manda a la del escritorio.
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Bloque } from '@protocolo';
-import { enviar, estado, leerArchivo, urlMedio, ver, avisar, borrarArchivo, claveArchivo } from '../tienda.ts';
+import { enviar, estado, leerArchivo, urlMedio, ver, avisar, borrarArchivo, claveArchivo, guardarArchivo, mostrarError } from '../tienda.ts';
 import { Docx, Pdf } from './Paginas.tsx';
 import { renderizar } from '../md.ts';
 import { Codigo } from './Documento.tsx';
@@ -54,7 +54,7 @@ const relativa = (ruta: string, cwd: string) => cwd && ruta.startsWith(cwd + '/'
 const carpetaDe = (ruta: string, cwd: string) => { const d = relativa(ruta, cwd).replace(/\/?[^/]+$/, ''); return d ? nombreCarpeta(d) : nombreCarpeta(cwd); };
 const iconoDe = (ruta: string) => IMAGEN.test(ruta) ? 'imagen' : MEDIO.test(ruta) ? 'video' : /\.(md|markdown|txt|pdf|html?|docx?|odt)$/i.test(ruta) ? 'leer' : 'codigo';
 
-type Cargado = { estado: 'cargando' } | { estado: 'error'; texto: string } | { estado: 'listo'; tipo: string; url?: string; texto?: string; datos?: Blob; ruta: string };
+type Cargado = { estado: 'cargando' } | { estado: 'error'; texto: string } | { estado: 'listo'; tipo: string; url?: string; texto?: string; datos?: Blob; ruta: string; modificado?: number };
 
 /** «Abrir con…»: la lista de apps que el escritorio tiene para ese archivo */
 function AbrirCon({ ruta, cwd }: { ruta: string; cwd: string }) {
@@ -78,6 +78,49 @@ function AbrirCon({ ruta, cwd }: { ruta: string; cwd: string }) {
   );
 }
 
+/** Editar un .md en el mismo visor. Ctrl+S guarda, Esc sale (si hay cambios, pregunta con un segundo Esc). */
+function EditorMd({ texto, modificado, alGuardar, alSalir }: { texto: string; modificado?: number; alGuardar: (t: string, leido?: number) => Promise<boolean>; alSalir: () => void }) {
+  const [borrador, setBorrador] = useState(texto);
+  // La versión con que se empezó a editar: si el agente la cambia mientras tanto, guardar avisa en vez de pisarla
+  const [leido] = useState(modificado);
+  const [guardando, setGuardando] = useState(false);
+  const [salirArmado, setSalirArmado] = useState(false);
+  const caja = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { caja.current?.focus(); caja.current?.setSelectionRange(0, 0); }, []);
+  const cambiado = borrador !== texto;
+  async function guardar() {
+    if (guardando || !cambiado) return;
+    setGuardando(true);
+    const bien = await alGuardar(borrador, leido);
+    setGuardando(false);
+    if (bien) alSalir();
+  }
+  function salir() {
+    if (!cambiado || salirArmado) { alSalir(); return; }
+    setSalirArmado(true); setTimeout(() => setSalirArmado(false), 2500);
+  }
+  return (
+    <div class="visor-editor">
+      <div class="visor-editor-barra">
+        <span class="visor-editor-estado">{guardando ? 'Guardando…' : salirArmado ? 'Sin guardar: otra vez para descartar' : cambiado ? 'Cambios sin guardar' : 'Editando'}</span>
+        <button type="button" class="git-accion" onClick={salir}>{salirArmado ? 'Descartar' : 'Cancelar'}</button>
+        <button type="button" class="git-accion visor-guardar" disabled={!cambiado || guardando} title="Guardar (Ctrl+S)" onClick={() => void guardar()}>Guardar</button>
+      </div>
+      <textarea ref={caja} class="visor-editor-texto" value={borrador} spellcheck={false} aria-label="Texto del archivo"
+        onInput={e => setBorrador((e.currentTarget as HTMLTextAreaElement).value)}
+        onKeyDown={e => {
+          if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); void guardar(); }
+          else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); salir(); }
+          else if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) {   // sangría con Tab, como en un editor
+            e.preventDefault();
+            const t = e.currentTarget as HTMLTextAreaElement, i = t.selectionStart;
+            t.setRangeText('  ', i, t.selectionEnd, 'end'); setBorrador(t.value);
+          }
+        }} />
+    </div>
+  );
+}
+
 function Vista({ ruta, cwd, firma, id }: { ruta: string; cwd: string; firma: number; id?: string }) {
   const [c, setC] = useState<Cargado>({ estado: 'cargando' });
   const [fuente, setFuente] = useState(false);
@@ -92,12 +135,13 @@ function Vista({ ruta, cwd, firma, id }: { ruta: string; cwd: string; firma: num
       const tipo = r.tipo.split(';')[0]!;
       if (tipo === 'application/pdf' || /\.docx$/i.test(ruta)) setC({ estado: 'listo', tipo, datos: r.datos, ruta: r.ruta });
       else if (tipo.startsWith('image/')) { url = URL.createObjectURL(r.datos); setC({ estado: 'listo', tipo, url, ruta: r.ruta }); }
-      else if (tipo.startsWith('text/')) setC({ estado: 'listo', tipo, texto: await r.datos.text(), ruta: r.ruta });
+      else if (tipo.startsWith('text/')) setC({ estado: 'listo', tipo, texto: await r.datos.text(), ruta: r.ruta, modificado: r.modificado });
       else setC({ estado: 'listo', tipo, ruta: r.ruta });
     }).catch((e: Error) => vivo && setC({ estado: 'error', texto: e.message }));
     return () => { vivo = false; if (url) setTimeout(() => URL.revokeObjectURL(url), 1000); };
   }, [ruta, cwd, firma, vez]);
-  useEffect(() => setFuente(false), [ruta]);
+  const [editando, setEditando] = useState(false);
+  useEffect(() => { setFuente(false); setEditando(false); }, [ruta]);
 
   const nombre = ruta.split('/').pop() || ruta;
   const esMd = /\.(md|markdown)$/i.test(ruta), esHtml = /\.html?$/i.test(ruta);
@@ -115,6 +159,15 @@ function Vista({ ruta, cwd, firma, id }: { ruta: string; cwd: string; firma: num
   else if (c.datos && c.tipo === 'application/pdf') cuerpo = <Pdf datos={c.datos} />;
   else if (c.datos) cuerpo = <Docx datos={c.datos} />;
   else if (c.tipo.startsWith('image/')) cuerpo = <Imagen key={c.url} url={c.url!} nombre={nombre} />;
+  else if (c.texto !== undefined && esMd && editando) cuerpo = (
+    <EditorMd texto={c.texto} modificado={c.modificado} alSalir={() => setEditando(false)} alGuardar={async (t, leido) => {
+      const r = await guardarArchivo(c.ruta, cwd, t, leido);
+      if (r.error) { mostrarError(r.error); return false; }
+      setC({ ...c, texto: t, modificado: r.modificado });
+      mostrarError(`Guardé «${nombre}».`, 'info');
+      return true;
+    }} />
+  );
   else if (c.texto !== undefined && esHtml && !fuente) cuerpo = <iframe class="visor-marco visor-html" sandbox="" srcdoc={c.texto} title={nombre} />;
   else if (c.texto !== undefined && esMd && !fuente) cuerpo = <div class="md visor-md" dangerouslySetInnerHTML={{ __html: html }} />;
   else if (c.texto !== undefined) cuerpo = <Codigo texto={c.texto.length > 400000 ? c.texto.slice(0, 400000) + '\n… (recortado)' : c.texto} lenguaje={lenguajeDe(ruta)} />;
@@ -130,7 +183,8 @@ function Vista({ ruta, cwd, firma, id }: { ruta: string; cwd: string; firma: num
       <header class="visor-cabecera">
         <BotonIcono icono="indice" titulo="Todos los archivos" onClick={() => { estado.visor = null; avisar(); }} />
         <span class="visor-nombre" title={c.estado === 'listo' ? rutaCorta(c.ruta) : ruta}>{nombre}</span>
-        {(esMd || esHtml) && <BotonIcono icono="codigo" titulo={fuente ? 'Ver como documento' : 'Ver el código'} activo={fuente} onClick={() => setFuente(x => !x)} />}
+        {esMd && !editando && c.estado === 'listo' && c.texto !== undefined && <BotonIcono icono="editar" titulo="Editar este Markdown" onClick={() => setEditando(true)} />}
+        {(esMd || esHtml) && !editando && <BotonIcono icono="codigo" titulo={fuente ? 'Ver como documento' : 'Ver el código'} activo={fuente} onClick={() => setFuente(x => !x)} />}
         <BotonIcono icono="recargar" titulo="Volver a cargar" onClick={() => setVez(x => x + 1)} />
         <AbrirCon ruta={ruta} cwd={cwd} />
         <Papelera clase="icono-boton" titulo="Mandar a la papelera" onBorrar={() => borrarArchivo(ruta, cwd, id)} />
@@ -149,20 +203,28 @@ export function Visor({ bloques, cwd }: { bloques: Bloque[]; cwd: string }) {
   // Si el agente vuelve a tocar el archivo que se está viendo, se recarga solo
   const firma = v ? bloques.filter(b => b.tipo === 'herramienta' && b.estado === 'ok' && rutaDe(b.entrada).endsWith(v.ruta.replace(/^\.\//, ''))).length + v.vez * 1000 : 0;
   if (v) return <Vista key={v.ruta} ruta={v.ruta} cwd={v.cwd} firma={firma} id={todos.find(a => a.ruta === v.ruta)?.id} />;
+  // Agrupados por carpeta, cada una en su cuadro (como la barra izquierda); el orden: la que tiene lo más reciente primero
+  const porCarpeta = new Map<string, ArchivoVisto[]>();
+  for (const a of archivos) { const k = carpetaDe(a.ruta, cwd); porCarpeta.set(k, [...porCarpeta.get(k) || [], a]); }
   return (
     <div class="visor-lista">
-      <h3 class="panel-titulo">Archivos</h3>
-      <ul>
-        {archivos.map(a => (
-          <li key={a.ruta}>
-            <button type="button" class="visor-archivo" title={rutaCorta(a.ruta)} onClick={() => ver(a.ruta, cwd)}>
-              <Icono nombre={iconoDe(a.ruta)} tam={14} />
-              <span class="visor-archivo-texto"><span>{a.ruta.split('/').pop()}</span><small>{carpetaDe(a.ruta, cwd)}</small></span>
-            </button>
-            <Papelera clase="agente-accion visor-borrar" titulo="Mandar a la papelera" onBorrar={() => borrarArchivo(a.ruta, cwd, a.id)} />
-          </li>
-        ))}
-      </ul>
+      {!archivos.length && <p class="visor-nota">Aún no hay archivos en esta conversación.</p>}
+      {[...porCarpeta].map(([carpeta, lista]) => (
+        <details key={carpeta} class="cuadro" open>
+          <summary class="cuadro-cabecera"><span class="carpeta-flecha" aria-hidden="true" /><Icono nombre="carpeta" tam={14} /><span class="cuadro-nombre">{carpeta}</span><span class="git-cantidad">{lista.length}</span></summary>
+          <ul class="cuadro-lista">
+            {lista.map(a => (
+              <li key={a.ruta}>
+                <button type="button" class="visor-archivo" title={rutaCorta(a.ruta)} onClick={() => ver(a.ruta, cwd)}>
+                  <Icono nombre={iconoDe(a.ruta)} tam={14} />
+                  <span class="visor-archivo-texto"><span>{a.ruta.split('/').pop()}</span><small>{a.como}</small></span>
+                </button>
+                <Papelera clase="agente-accion visor-borrar" titulo="Mandar a la papelera" onBorrar={() => borrarArchivo(a.ruta, cwd, a.id)} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
     </div>
   );
 }

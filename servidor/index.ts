@@ -12,7 +12,9 @@ import { explorar } from './carpetas.ts';
 import { crearNotificador } from './notificar.ts';
 import { catalogo } from './catalogo.ts';
 import { abrirCon, abrirArchivo, aplicaciones } from './abrir.ts';
-import { leerArchivo, comoPdf, servirMedio } from './archivos.ts';
+import { leerArchivo, comoPdf, servirMedio, guardarMd } from './archivos.ts';
+import { vigilarBateria } from './bateria.ts';
+import type { Bateria } from './protocolo.ts';
 import { borrarArchivo } from './papelera.ts';
 import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
 import { avisarCuota, cerrarCodex, limiteCodex } from './codex.ts';
@@ -42,6 +44,8 @@ const mandarCatalogo = async (fresco = false) => emitir({ t: 'catalogo', proveed
 const nuevoLimite = (l?: ReturnType<typeof limiteCodex>) => { if (l) { anotarLimite(l); emitir({ t: 'limites', ...listaLimites() }); } };
 avisarCuota(() => { void mandarCatalogo(true).catch(() => {}); nuevoLimite(limiteCodex()); });
 avisarUsoClaude(nuevoLimite);
+let ultimaBateria: Bateria | null = null;
+vigilarBateria(b => { ultimaBateria = b; emitir({ t: 'bateria', bateria: b }); });
 void catalogo().catch(() => {});   // se arma al arrancar para que el diálogo lo tenga listo
 const servidor = createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -64,7 +68,7 @@ const servidor = createServer(async (req, res) => {
     try {
       const ruta = url.searchParams.get('ruta') || '', cwd = url.searchParams.get('cwd') || '';
       const a = url.searchParams.get('como') === 'pdf' ? await comoPdf(ruta, cwd) : await leerArchivo(ruta, cwd);
-      res.writeHead(200, { 'Content-Type': a.tipo, 'Cache-Control': 'no-store', 'X-Ruta': encodeURIComponent(a.ruta), 'Content-Security-Policy': "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; sandbox" });
+      res.writeHead(200, { 'Content-Type': a.tipo, 'Cache-Control': 'no-store', 'X-Ruta': encodeURIComponent(a.ruta), ...(a.modificado ? { 'X-Modificado': String(a.modificado) } : {}), 'Content-Security-Policy': "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; sandbox" });
       res.end(req.method === 'HEAD' ? undefined : a.datos);
     } catch (e) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(e instanceof Error ? e.message : 'No se pudo leer.'); }
     return;
@@ -88,7 +92,7 @@ servidor.on('upgrade', (req, socket, head) => {
       try {
         const m = validarMensaje(JSON.parse(datos.toString())), cliente = clientes.get(ws)!;
         switch (m.t) {
-          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); break;
+          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); enviar(ws, { t: 'bateria', bateria: ultimaBateria }); break;
           case 'foco': cliente.visible = m.visible; cliente.fecha = Date.now(); break;
           case 'crear': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.prompt }); cliente.agente = a.id; break; }
           case 'reanudar': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, prompt: m.texto, reanudar: m.sessionId }); cliente.agente = a.id; break; }
@@ -119,6 +123,10 @@ servidor.on('upgrade', (req, socket, head) => {
             if (m.red) enviar(ws, { t: 'github', cwd: m.cwd, github: await infoGithub(m.cwd).catch(e => ({ nota: e instanceof Error ? e.message : 'No se pudo leer GitHub.' })) });
             break;
           }
+          case 'guardarArchivo':
+            try { const g = await guardarMd(m.ruta, m.cwd || '', m.texto, m.leido); enviar(ws, { t: 'archivoGuardado', ruta: m.ruta, cwd: m.cwd, modificado: g.modificado }); }
+            catch (e) { enviar(ws, { t: 'archivoGuardado', ruta: m.ruta, cwd: m.cwd, error: e instanceof Error ? e.message : 'No se pudo guardar.' }); }
+            break;
           case 'memorias':
             try { enviar(ws, { t: 'memorias', cwd: m.cwd, proveedores: await memorias(m.cwd) }); }
             catch (e) { enviar(ws, { t: 'memorias', cwd: m.cwd, error: e instanceof Error ? e.message : 'No se pudieron leer las memorias.' }); }

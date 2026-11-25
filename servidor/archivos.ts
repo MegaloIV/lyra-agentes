@@ -4,7 +4,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, type Stats } from 'node:fs';
-import { mkdir, mkdtemp, open, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import { extname, isAbsolute, join, resolve, sep } from 'node:path';
@@ -32,7 +32,7 @@ export const OFICINA = /\.(pptx?|xlsx?|docx?|odt|odp|ods|rtf)$/i;
 /** Carpetas ocultas que sí se pueden mostrar: imágenes de Codex y planes de Claude */
 const PERMITIDAS = ['.codex/generated_images', '.claude/plans'];
 
-export type Archivo = { ruta: string; tipo: string; tamano: number; datos: Buffer };
+export type Archivo = { ruta: string; tipo: string; tamano: number; datos: Buffer; modificado?: number };
 
 /** Resuelve la ruta y comprueba que se pueda mostrar. `ruta` puede ser relativa a `cwd`; ~/ es la carpeta personal */
 export async function ubicar(ruta: string, cwd = ''): Promise<{ real: string; info: Stats }> {
@@ -64,8 +64,23 @@ export async function leerArchivo(ruta: string, cwd = ''): Promise<Archivo> {
   try {
     const datos = await f.readFile();
     const tipo = TIPOS[ext] || (datos.subarray(0, 8000).includes(0) ? 'application/octet-stream' : 'text/plain; charset=utf-8');
-    return { ruta: real, tipo, tamano: info.size, datos };
+    return { ruta: real, tipo, tamano: info.size, datos, modificado: info.mtimeMs };
   } finally { await f.close(); }
+}
+
+/** Guarda un Markdown editado en el visor. Solo .md que ya existen y que el visor puede mostrar; se escribe en un
+ *  archivo aparte y se renombra encima, para no dejarlo a medias. Si cambió en el disco desde que se abrió, no lo pisa. */
+export async function guardarMd(ruta: string, cwd: string, texto: string, leido?: number): Promise<{ ruta: string; modificado: number }> {
+  const { real, info } = await ubicar(ruta, cwd);
+  if (!/\.(md|markdown)$/i.test(real)) throw new Error('Solo se pueden editar archivos Markdown (.md).');
+  if (Buffer.byteLength(texto) > 900 * 1024) throw new Error('El texto es demasiado largo para guardarlo desde el visor.');
+  if (leido && Math.abs(info.mtimeMs - leido) > 1) throw new Error('El archivo cambió mientras lo editabas (quizá lo tocó el agente). Copia tu texto, vuelve a cargarlo y edítalo otra vez.');
+  const tmp = `${real}.lyra-${process.pid}-${Date.now()}.tmp`;
+  try {
+    await writeFile(tmp, texto, { mode: info.mode & 0o777 });
+    await rename(tmp, real);
+  } catch (e) { await rm(tmp, { force: true }); throw e instanceof Error && 'code' in e && e.code === 'EACCES' ? new Error('No tengo permiso para escribir ese archivo.') : e; }
+  return { ruta: real, modificado: (await stat(real)).mtimeMs };
 }
 
 /** Video o audio, por partes: el reproductor pide trozos con Range */

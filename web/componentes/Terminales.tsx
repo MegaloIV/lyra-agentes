@@ -4,6 +4,7 @@ import type { Bloque } from '@protocolo';
 import { mostrarError } from '../tienda.ts';
 import { limpiarSalida } from '../terminales.ts';
 import { rutaCorta } from '../util.ts';
+import { Icono } from './iconos.tsx';
 
 type Herramienta = Extract<Bloque, { tipo: 'herramienta' }>;
 export function comandosTerminal(bloques: Bloque[]): Herramienta[] {
@@ -27,18 +28,24 @@ function Comando({ bloque, ahora }: { bloque: Herramienta; ahora: number }) {
     if (el && (corriendo || abierto)) el.scrollTop = el.scrollHeight;
   }, [salida, abierto]);
   const copiar = (texto: string) => void navigator.clipboard.writeText(texto).then(() => mostrarError('Copiado', 'info'), () => mostrarError('No se pudo copiar'));
-  return <article class="terminal-comando" data-estado={bloque.estado}>
-    <button type="button" class="terminal-resumen" aria-expanded={abierto} onClick={() => abrir(!abierto)}>
-      {descripcion && <strong>{descripcion}</strong>}
-      <code>{comando}</code>
-      {carpeta && <span class="terminal-carpeta">{rutaCorta(carpeta)}</span>}
-      <span class="terminal-estado">{corriendo && <i class="terminal-punto" />}{corriendo ? 'corriendo…' : bloque.estado === 'ok' ? 'ok' : `error${t?.codigo !== undefined ? ` (${t.codigo})` : ''}`} · {duracion === undefined ? 'duración no disponible' : `${(Math.max(0, duracion) / 1000).toFixed(1)} s`}</span>
+  const titulo = descripcion || comando.split('\n')[0] || 'Comando';
+  const estadoTexto = corriendo ? 'corriendo…' : bloque.estado === 'ok' ? 'ok' : `error${t?.codigo !== undefined ? ` (${t.codigo})` : ''}`;
+  return <article class="cuadro terminal-comando" data-estado={bloque.estado} data-abierto={abierto ? 'true' : undefined}>
+    <button type="button" class="cuadro-cabecera terminal-resumen" aria-expanded={abierto} onClick={() => abrir(!abierto)}>
+      <span class="carpeta-flecha" aria-hidden="true" />
+      <span class="terminal-icono" aria-label={estadoTexto}>{corriendo ? <i class="terminal-punto" /> : <Icono nombre={bloque.estado === 'ok' ? 'ok' : 'cerrar'} tam={12} />}</span>
+      <span class="terminal-titulo">{titulo}</span>
+      <span class="terminal-duracion">{duracion === undefined ? '' : `${(Math.max(0, duracion) / 1000).toFixed(1)} s`}</span>
     </button>
-    <div class="terminal-acciones">
-      <button type="button" onClick={() => copiar(comando)}>Copiar comando</button>
-      <button type="button" disabled={!salida} onClick={() => copiar(salida)}>Copiar salida</button>
-    </div>
-    {abierto && <pre ref={salidaRef} class="terminal-salida" tabIndex={0} aria-label="Salida del comando">{salida || (corriendo ? 'corriendo…' : 'Sin salida')}</pre>}
+    {abierto && <div class="terminal-detalle">
+      <pre class="terminal-codigo">{comando}</pre>
+      <p class="terminal-datos">{estadoTexto}{carpeta && <> · <span class="terminal-carpeta">{rutaCorta(carpeta)}</span></>}</p>
+      <pre ref={salidaRef} class="terminal-salida" tabIndex={0} aria-label="Salida del comando">{salida || (corriendo ? 'corriendo…' : 'Sin salida')}</pre>
+      <div class="terminal-acciones">
+        <button type="button" class="git-accion" onClick={() => copiar(comando)}>Copiar comando</button>
+        <button type="button" class="git-accion" disabled={!salida} onClick={() => copiar(salida)}>Copiar salida</button>
+      </div>
+    </div>}
   </article>;
 }
 
@@ -51,5 +58,5 @@ export function Terminales({ bloques }: { bloques: Bloque[] }) {
     const reloj = setInterval(() => ponerAhora(Date.now()), 1000);
     return () => clearInterval(reloj);
   }, [corriendo]);
-  return <div class="terminales">{comandos.length ? comandos.map(b => <Comando key={b.id} bloque={b} ahora={ahora} />) : <p>Aún no hay comandos de terminal en esta conversación.</p>}</div>;
+  return <div class="terminales">{comandos.length ? comandos.map(b => <Comando key={b.id} bloque={b} ahora={ahora} />) : <p class="visor-nota">Aún no hay comandos de terminal en esta conversación.</p>}</div>;
 }

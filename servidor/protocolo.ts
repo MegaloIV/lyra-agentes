@@ -48,6 +48,8 @@ export type InfoGithub = {
   pruebas?: PruebaGit[];
   issues?: { numero: number; titulo: string; url: string; cuerpo: string; etiquetas: string[]; autor?: string }[];
 };
+/** La batería de la laptop: porcentaje y si se está cargando */
+export type Bateria = { nivel: number; estado: 'cargando' | 'descargando' | 'llena' | 'enchufada' };
 export type ClienteMensaje =
   | { t: 'hola' | 'historial' }
   /** Las subcarpetas de `ruta`, para el explorador del chip «carpeta» */
@@ -73,6 +75,8 @@ export type ClienteMensaje =
   /** Pestaña GitHub: el estado de git de `cwd` y, con `red`, también lo de GitHub */
   | { t: 'git'; cwd: string; red?: boolean }
   | { t: 'memorias'; cwd: string }
+  /** Guarda un .md editado en el visor (`leido`: la fecha de modificación con que se abrió, para no pisar cambios) */
+  | { t: 'guardarArchivo'; ruta: string; cwd?: string; texto: string; leido?: number }
   /** El diff de un archivo (`ruta`, relativa a la raíz del repo) o de un commit */
   | { t: 'gitDiff'; cwd: string; ruta?: string; commit?: string }
   /** El registro de una prueba que falló, para ponerlo en la caja */
@@ -105,6 +109,8 @@ export type ServidorMensaje =
   | { t: 'github'; cwd: string; github: InfoGithub }
   | { t: 'gitDiff'; cwd: string; clave: string; texto?: string; error?: string }
   | { t: 'registroPrueba'; cwd: string; texto: string; nombre?: string }
+  | { t: 'bateria'; bateria: Bateria | null }
+  | { t: 'archivoGuardado'; ruta: string; cwd?: string; error?: string; modificado?: number }
   | { t: 'aplicaciones'; ruta: string; apps: { id: string; nombre: string; predeterminada?: boolean }[] };
 export function aplicarOps(bloques: Bloque[], ops: Op[]): Bloque[] {
   const salida = [...bloques];

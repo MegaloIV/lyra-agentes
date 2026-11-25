@@ -19,6 +19,7 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'aplicaciones': valido = texto('ruta') && !!m.ruta && texto('cwd', true); break;
     case 'borrarArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true) && (m.id === undefined || typeof m.id === 'string' && m.id.length <= 200); break;
     case 'git': valido = texto('cwd') && !!m.cwd && (m.cwd as string).length <= 4096 && (m.red === undefined || typeof m.red === 'boolean'); break;
+    case 'guardarArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true) && typeof m.texto === 'string' && (m.leido === undefined || typeof m.leido === 'number' && Number.isFinite(m.leido)); break;
     case 'memorias': valido = texto('cwd') && !!m.cwd && (m.cwd as string).length <= 4096; break;
     case 'gitDiff': valido = texto('cwd') && !!m.cwd && texto('ruta', true) && texto('commit', true) && (!!m.ruta !== !!m.commit); break;
     case 'registroPrueba': valido = texto('cwd') && !!m.cwd && Number.isSafeInteger(m.run) && (m.run as number) > 0 && (m.job === undefined || Number.isSafeInteger(m.job) && (m.job as number) > 0); break;

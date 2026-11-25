@@ -1,6 +1,6 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub, MemoriasProveedor } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub, MemoriasProveedor, Bateria } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
 /** `null`: un agente nuevo, todavía sin crear (se crea al mandar el primer mensaje) */
@@ -49,6 +49,8 @@ export const estado = {
   pidiendoRegistro: '',
   /** Pestaña Memorias, por carpeta */
   memorias: new Map<string, { proveedores?: MemoriasProveedor[]; error?: string; pidiendo?: boolean }>(),
+  /** Batería de la laptop (null: no hay o todavía no llegó) */
+  bateria: null as Bateria | null,
 };
 
 const oyentes = new Set<() => void>();
@@ -71,10 +73,10 @@ function leerToken(): string {
 const token = leerToken();
 
 /** Lee un archivo para el visor (el servidor comprueba el token y la ruta) */
-export async function leerArchivo(ruta: string, cwd: string, como?: 'pdf'): Promise<{ tipo: string; datos: Blob; ruta: string }> {
+export async function leerArchivo(ruta: string, cwd: string, como?: 'pdf'): Promise<{ tipo: string; datos: Blob; ruta: string; modificado?: number }> {
   const r = await fetch(`/api/archivo?ruta=${encodeURIComponent(ruta)}&cwd=${encodeURIComponent(cwd)}${como ? '&como=' + como : ''}`, { headers: { 'X-Lyra-Token': token }, cache: 'no-store' });
   if (!r.ok) throw new Error((await r.text()) || 'No se pudo leer el archivo.');
-  return { tipo: r.headers.get('Content-Type') || '', datos: await r.blob(), ruta: decodeURIComponent(r.headers.get('X-Ruta') || '') || ruta };
+  return { tipo: r.headers.get('Content-Type') || '', datos: await r.blob(), ruta: decodeURIComponent(r.headers.get('X-Ruta') || '') || ruta, modificado: Number(r.headers.get('X-Modificado')) || undefined };
 }
 
 /** Videos y audio: el reproductor no manda cabeceras, el token va en la dirección (solo a este servidor) */
@@ -121,6 +123,18 @@ export function explorar(ruta: string) { estado.explorado = null; enviar({ t: 'e
 export const claveArchivo = (ruta: string, cwd = '') => `${cwd}\0${ruta}`;
 /** Manda un archivo a la papelera del escritorio (se recupera desde el gestor de archivos) */
 export function borrarArchivo(ruta: string, cwd: string, id?: string) { enviar({ t: 'borrarArchivo', ruta, cwd, id }); }
+
+/** Guarda un .md editado en el visor; responde con su nueva fecha de modificación o con el error */
+const guardando = new Map<string, (r: { error?: string; modificado?: number }) => void>();
+export function guardarArchivo(ruta: string, cwd: string, texto: string, leido?: number): Promise<{ error?: string; modificado?: number }> {
+  if (ws?.readyState !== WebSocket.OPEN) return Promise.resolve({ error: 'Sin conexión con el servidor.' });
+  return new Promise(ok => {
+    const k = claveArchivo(ruta, cwd);
+    guardando.get(k)?.({ error: 'Se volvió a guardar.' });
+    guardando.set(k, ok);
+    enviar({ t: 'guardarArchivo', ruta, cwd, texto, leido });
+  });
+}
 
 /** Busca las memorias de cada proveedor para esta carpeta */
 export function pedirMemorias(cwd: string) {
@@ -263,6 +277,8 @@ function recibir(m: ServidorMensaje) {
       if (estado.visor?.ruta === m.ruta && estado.visor.cwd === (m.cwd || '')) estado.visor = null;
       break;
     }
+    case 'bateria': estado.bateria = m.bateria; break;
+    case 'archivoGuardado': { const k = claveArchivo(m.ruta, m.cwd); guardando.get(k)?.({ error: m.error, modificado: m.modificado }); guardando.delete(k); break; }
     case 'memorias': estado.memorias.set(m.cwd, { proveedores: m.proveedores, error: m.error, pidiendo: false }); break;
     case 'git': {
       const i = estado.git.get(m.cwd) || {};
