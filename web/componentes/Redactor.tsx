@@ -1,14 +1,30 @@
 // La caja de texto de abajo, con los ajustes del agente a la mano (proveedor, modelo, esfuerzo, permisos y carpeta).
 // Sin agente elegido es un agente nuevo: se crea al mandar el primer mensaje, con los ajustes que estén puestos.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import type { PermissionMode, Proveedor, ResumenAgente } from '@protocolo';
-import { estado, enviar, crearAgente, cambiarBorrador, explorar, subirAdjunto, mostrarError, type Vista } from '../tienda.ts';
+import type { Bloque, PermissionMode, Proveedor, ResumenAgente } from '@protocolo';
+import { estado, enviar, crearAgente, cambiarBorrador, explorar, subirAdjunto, mostrarError, guardarLocal, type Vista } from '../tienda.ts';
 import { etiquetaAdjunto, textoConAdjuntos, rutasPegadas, type Adjunto } from '../adjuntos.ts';
 import { Desplegable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { PROVEEDORES, cronometro, horaDe, info, miles, tokensCortos, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
 
 const borradores = new Map<string, string>();
+
+/** Mensajes enviados antes, para traerlos con Ctrl+↑ / Ctrl+↓ como en la terminal. Se guardan por carpeta. */
+const MENSAJES = 'lyra-mensajes';
+type Enviado = { texto: string; cwd: string };
+function enviados(): Enviado[] { try { const l = JSON.parse(localStorage.getItem(MENSAJES) || '[]'); return Array.isArray(l) ? l : []; } catch { return []; } }
+function recordar(texto: string, cwd: string) {
+  const l = enviados().filter(m => !(m.texto === texto && m.cwd === cwd));
+  l.push({ texto, cwd });
+  guardarLocal(MENSAJES, l.slice(-300));
+}
+/** Del más nuevo al más viejo: los de esta conversación y después los mandados desde Lyra en la misma carpeta */
+function anteriores(bloques: readonly Bloque[], cwd: string): string[] {
+  const propios = bloques.flatMap(b => b.tipo === 'usuario' ? [b.md.split('\n\nArchivos adjuntos (rutas locales):')[0]!.trim()] : []).reverse();
+  const lyra = enviados().filter(m => rutaCorta(m.cwd) === rutaCorta(cwd)).map(m => m.texto).reverse();
+  return [...new Set([...propios, ...lyra].filter(Boolean))];
+}
 const archivosBorrador = new Map<string, Adjunto[]>();
 /** Con qué se retoma una conversación del historial (vacío: el modelo y el esfuerzo predeterminados) */
 type Reanudo = { modelo: string; esfuerzo: string; modo: PermissionMode };
@@ -188,6 +204,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   const componiendo = useRef(false);
   /** Lo último que borró Ctrl+U, para que Ctrl+Z lo devuelva */
   const borrado = useRef<{ clave: string; texto: string; adjuntos: Adjunto[] } | null>(null);
+  /** Recorriendo los mensajes anteriores: cuál se ve (0 = el último enviado) y lo que se estaba escribiendo */
+  const recorrido = useRef<{ i: number; borrador: string; lista: string[] } | null>(null);
   const [texto, actualizarTexto] = useState(() => borradores.get(clave(vista)) || '');
   const [adjuntos, setAdjuntos] = useState<Adjunto[]>(() => archivosBorrador.get(clave(vista)) || []);
   const [subiendo, setSubiendo] = useState(0);
@@ -204,7 +222,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   }
   const nuevo = vista === null;
 
-  useLayoutEffect(() => { prefijo.current = 0; componiendo.current = false; actualizarTexto(borradores.get(k) || ''); setAdjuntos(archivosBorrador.get(k) || []); setElegido(0); setPopupCerrado(false); setReanudo(SIN_CAMBIOS); caja.current?.focus({ preventScroll: true }); }, [k]);
+  useLayoutEffect(() => { prefijo.current = 0; componiendo.current = false; actualizarTexto(borradores.get(k) || ''); setAdjuntos(archivosBorrador.get(k) || []); setElegido(0); setPopupCerrado(false); setReanudo(SIN_CAMBIOS); recorrido.current = null; caja.current?.focus({ preventScroll: true }); }, [k]);
   useLayoutEffect(() => {
     const t = caja.current; if (!t || componiendo.current) return;
     // No controlar value en cada render: WebKit puede cancelar la tecla muerta o el IME
@@ -264,6 +282,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
     else if (agente?.estado === 'error' && agente.sessionId) crearAgente({ t: 'reanudar', sessionId: agente.sessionId, cwd: agente.cwd, proveedor: agente.proveedor, texto: t });
     else if (agente) enviar({ t: 'enviar', agente: agente.id, texto: t, ...(ya && trabajando ? { ya: true } : {}) });
     else return;
+    recordar(texto.trim(), agente?.cwd || (vista?.tipo === 'sesion' ? vista.cwd : b.cwd) || '~');
+    recorrido.current = null;
     setTexto(''); borradores.delete(k);
     archivosBorrador.delete(k); setAdjuntos([]);
   }
@@ -370,6 +390,24 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && buscando?.[1] !== filtrados[indice]!.nombre.replace(/^\//, ''))) { e.preventDefault(); completar(indice); return; }
       if (e.key === 'Escape') { e.preventDefault(); setPopupCerrado(true); return; }
     }
+    // Mensajes anteriores: Ctrl+↑ / Ctrl+↓ siempre; ↑ / ↓ solos con la caja vacía o ya recorriéndolos, en la primera
+    // o la última línea (como en la terminal de Claude)
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey && !e.metaKey && !e.shiftKey) {
+      const c = caja.current!, antes = c.value.slice(0, c.selectionStart), despues = c.value.slice(c.selectionEnd);
+      const arriba = e.key === 'ArrowUp';
+      const vale = e.ctrlKey || ((!c.value || recorrido.current) && (arriba ? !antes.includes('\n') : !despues.includes('\n')));
+      if (vale && (arriba || recorrido.current)) {
+        e.preventDefault();
+        const doc = vista?.tipo === 'agente' ? estado.documentos.get(vista.id) : vista?.tipo === 'sesion' ? estado.documentos.get(vista.sessionId) : undefined;
+        const r = recorrido.current ?? { i: -1, borrador: texto, lista: anteriores(doc?.bloques || [], agente?.cwd || (vista?.tipo === 'sesion' ? vista.cwd : b.cwd) || '~') };
+        const i = Math.max(-1, Math.min(r.lista.length - 1, r.i + (arriba ? 1 : -1)));
+        if (i === r.i) return;
+        recorrido.current = i < 0 ? null : { ...r, i };
+        setTexto(i < 0 ? r.borrador : r.lista[i]!);
+        requestAnimationFrame(() => { const t = caja.current; if (t) { const fin = arriba ? 0 : t.value.length; t.setSelectionRange(fin, fin); } });
+        return;
+      }
+    }
     if (e.key === 'Tab' && e.shiftKey && (nuevo || agente || vista?.tipo === 'sesion')) { e.preventDefault(); siguienteModo(); return; }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); mandar(); return; }
     if (e.key === 'Escape' && trabajando && agente) {
@@ -419,7 +457,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
           }}><Icono nombre="cerrar" tam={11} /></button></span>)}</div>}
         <textarea ref={caja} class="redactor-texto" rows={1}
           placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : nuevo ? `¿Qué hacemos? (Enter envía · Shift+Enter, nueva línea)` : `Escribe a ${quien}…`}
-          onInput={e => { if (e.currentTarget.value) borrado.current = null; e.currentTarget.dataset.escribiendo = String(Date.now()); setTexto(e.currentTarget.value); setPopupCerrado(false); setElegido(0); }}
+          onInput={e => { recorrido.current = null; if (e.currentTarget.value) borrado.current = null; e.currentTarget.dataset.escribiendo = String(Date.now()); setTexto(e.currentTarget.value); setPopupCerrado(false); setElegido(0); }}
           onCompositionStart={() => { componiendo.current = true; }}
           onCompositionEnd={e => { componiendo.current = false; setTexto(e.currentTarget.value); }}
           onPaste={e => { if (recibirArchivos(e.clipboardData)) e.preventDefault(); }}
