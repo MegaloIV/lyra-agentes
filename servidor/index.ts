@@ -18,6 +18,7 @@ import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
 import { avisarCuota, cerrarCodex, limiteCodex } from './codex.ts';
 import { avisarUsoClaude } from './claude.ts';
 import { anotarLimite, limites, listaLimites } from './limites.ts';
+import { diffGit, estadoGit, infoGithub, registroPrueba } from './git.ts';
 // Si el servidor se lanzó desde una sesión de Claude Code, sus agentes heredarían estas variables y se
 // creerían sesiones hijas (no se guardan ni se pueden retomar).
 for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_AGENT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete process.env[k];
@@ -110,6 +111,20 @@ servidor.on('upgrade', (req, socket, head) => {
             emitir({ t: 'archivoBorrado', ruta: m.ruta, cwd: m.cwd, id: m.id });
             enviar(ws, { t: 'aviso', texto: `«${real.split('/').pop()}» está en la papelera.` }); break;
           }
+          case 'git': {
+            // Lo local llega al instante; lo de GitHub (internet) después, en otro mensaje
+            try { enviar(ws, { t: 'git', cwd: m.cwd, git: await estadoGit(m.cwd) }); }
+            catch (e) { enviar(ws, { t: 'git', cwd: m.cwd, error: e instanceof Error ? e.message : 'No se pudo leer git.' }); break; }
+            if (m.red) enviar(ws, { t: 'github', cwd: m.cwd, github: await infoGithub(m.cwd).catch(e => ({ nota: e instanceof Error ? e.message : 'No se pudo leer GitHub.' })) });
+            break;
+          }
+          case 'gitDiff': {
+            const clave = m.commit ? 'commit:' + m.commit : 'ruta:' + m.ruta;
+            try { enviar(ws, { t: 'gitDiff', cwd: m.cwd, clave, texto: await diffGit(m.cwd, { ruta: m.ruta, commit: m.commit }) }); }
+            catch (e) { enviar(ws, { t: 'gitDiff', cwd: m.cwd, clave, error: e instanceof Error ? e.message : 'No se pudo leer el diff.' }); }
+            break;
+          }
+          case 'registroPrueba': enviar(ws, { t: 'registroPrueba', cwd: m.cwd, texto: await registroPrueba(m.cwd, m.run, m.job) }); break;
           case 'guardarGrupos': emitir({ t: 'grupos', grupos: await guardarGrupos(m.grupos) }); break;
           case 'historial': emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'borrar': {

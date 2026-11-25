@@ -156,7 +156,14 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   useEffect(() => {
     const enfocar = () => caja.current?.focus();
     window.addEventListener('lyra-enfocar', enfocar);
-    return () => window.removeEventListener('lyra-enfocar', enfocar);
+    // La pestaña GitHub escribe encargos aquí; se suman a lo que ya hubiera escrito
+    const insertar = (e: Event) => {
+      const t = String((e as CustomEvent).detail || '');
+      setTexto(prev => prev.trim() ? prev.trimEnd() + '\n\n' + t : t);
+      setTimeout(() => { const c = caja.current; if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); c.scrollTop = c.scrollHeight; } }, 0);
+    };
+    window.addEventListener('lyra-insertar', insertar);
+    return () => { window.removeEventListener('lyra-enfocar', enfocar); window.removeEventListener('lyra-insertar', insertar); };
   }, []);
   // El agente nuevo arranca en la carpeta del último usado si no hay una elegida
   if (nuevo && !estado.borrador.cwd) { const c = estado.agentes[0]?.cwd || estado.historial[0]?.cwd; if (c) estado.borrador.cwd = rutaCorta(c); }

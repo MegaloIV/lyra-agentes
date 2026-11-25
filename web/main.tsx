@@ -9,6 +9,7 @@ import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Do
 import { Redactor } from './componentes/Redactor.tsx';
 import { Reloj } from './componentes/Reloj.tsx';
 import { Visor, archivosDe } from './componentes/Visor.tsx';
+import { Github } from './componentes/Github.tsx';
 import type { Bloque } from '@protocolo';
 import { aMarkdown, haceCuanto, nombreProveedor, rutaCorta } from './util.ts';
 
@@ -96,9 +97,10 @@ function guardarArchivo(nombre: string, texto: string) {
 }
 const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
 
-/** Ancho del panel derecho, uno para el índice y otro para el visor; se cambia arrastrando su borde */
-function leerAnchos(): Record<'indice' | 'visor', number> {
-  try { return { indice: 240, visor: 460, ...JSON.parse(localStorage.getItem('lyra-anchos') || '{}') }; } catch { return { indice: 240, visor: 460 }; }
+/** Ancho del panel derecho, uno por pestaña (índice, visor, GitHub); se cambia arrastrando su borde */
+const ANCHOS = { indice: 240, visor: 460, github: 380 };
+function leerAnchos(): Record<Exclude<Panel, null>, number> {
+  try { return { ...ANCHOS, ...JSON.parse(localStorage.getItem('lyra-anchos') || '{}') }; } catch { return { ...ANCHOS }; }
 }
 
 /** Ancho de la barra de la izquierda (en px); se cambia arrastrando su borde derecho */
@@ -152,6 +154,8 @@ function App() {
   }, [nuevos.map(a => a.id).join()]);
   useEffect(() => { if (panel === 'visor' && conocidos) { for (const a of archivos) conocidos.add(a.id + a.ruta); refrescar(); } }, [panel, claveDoc]);
   const hayNuevos = panel !== 'visor' && nuevos.length > 0;
+  /** Turnos terminados: la pestaña GitHub se vuelve a leer al terminar cada uno */
+  const turnos = useMemo(() => doc?.bloques.filter(b => b.tipo === 'fin').length || 0, [doc?.bloques]);
 
   // Atajos de teclado
   useEffect(() => {
@@ -162,6 +166,7 @@ function App() {
       if (e.ctrlKey && k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('lyra-enfocar')); return; }
       if (e.ctrlKey && k === 'i') { e.preventDefault(); alternar('indice'); return; }
       if (e.ctrlKey && k === 'o') { e.preventDefault(); alternar('visor'); return; }
+      if (e.ctrlKey && k === 'g') { e.preventDefault(); alternar('github'); return; }
       if (e.key === 'F2' && estado.vista) { e.preventDefault(); estado.editando = 'cabecera'; avisar(); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -209,6 +214,7 @@ function App() {
     <div class="iconos-grupo">
       <BotonIcono icono="indice" titulo="Índice (Ctrl+I)" activo={panel === 'indice'} onClick={() => alternar('indice')} />
       <BotonIcono icono="visor" titulo={hayNuevos ? 'Visor: hay archivos nuevos (Ctrl+O)' : 'Visor de archivos e imágenes (Ctrl+O)'} activo={panel === 'visor'} data-nuevo={hayNuevos ? 'true' : undefined} onClick={() => alternar('visor')} />
+      <BotonIcono icono="rama" titulo="GitHub: cambios, PR, pruebas e issues de esta carpeta (Ctrl+G)" activo={panel === 'github'} onClick={() => alternar('github')} />
     </div>
   );
 
@@ -265,12 +271,13 @@ function App() {
         <aside class="panel" data-modo={panel}>
           <div class="panel-borde" onPointerDown={arrastrarBorde} title="Arrastra para cambiar el ancho" />
           <header class="panel-cabecera">
-            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : 'Visor'}</span>
+            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : 'Visor'}</span>
             <BotonIcono icono="cerrar" titulo="Cerrar el panel" onClick={() => ponerPanel(null)} />
           </header>
           <div class="panel-cuerpo">
             {panel === 'indice'
               ? <Indice entradas={entradas.lista} activo={entradas.activo} onIr={id => { setIrA(x => ({ id, vez: x.vez + 1 })); if (angosto) setPanelAngosto(null); }} />
+              : panel === 'github' ? <Github cwd={cwd} turnos={turnos} />
               : <Visor bloques={doc?.bloques || []} cwd={cwd} />}
           </div>
         </aside>

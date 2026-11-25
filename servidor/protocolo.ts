@@ -29,6 +29,20 @@ export type Ventana = { tipo: 'corta' | 'larga'; nombre: string; usado: number; 
 export type Limite = { proveedor: Proveedor; plan?: string; ventanas: Ventana[]; nota?: string };
 /** Carpetas propias del usuario y en cuál está cada sesión (`sessionId` → id de carpeta) */
 export type Grupos = { carpetas: { id: string; nombre: string; abierta: boolean }[]; sesiones: Record<string, string> };
+/** Pestaña GitHub. `estado`: M modificado, A nuevo en el índice, D borrado, R renombrado, U en conflicto, ? sin seguimiento */
+export type CambioGit = { ruta: string; estado: 'M' | 'A' | 'D' | 'R' | 'U' | '?'; preparado: boolean };
+export type CommitGit = { hash: string; titulo: string; autor: string; fecha: number };
+export type EstadoGit = { repo: false; nota: string }
+  | { repo: true; raiz: string; rama: string; arriba?: string; adelante: number; atras: number; cambios: CambioGit[]; masCambios: number; commits: CommitGit[]; github?: string };
+/** Una prueba (CI): `run`/`job` sirven para pedir su registro */
+export type PruebaGit = { nombre: string; estado: 'ok' | 'error' | 'corriendo' | 'omitida'; url?: string; run?: number; job?: number };
+export type InfoGithub = {
+  repo?: string; rama?: string; nota?: string;
+  pr?: { numero: number; titulo: string; url: string; estado: 'abierto' | 'borrador' | 'fusionado' | 'cerrado'; revision?: 'aprobado' | 'cambios' | 'pendiente'; comentarios: number; pruebas: PruebaGit[] };
+  /** Sin PR: la última prueba de cada flujo en la rama */
+  pruebas?: PruebaGit[];
+  issues?: { numero: number; titulo: string; url: string; cuerpo: string; etiquetas: string[]; autor?: string }[];
+};
 export type ClienteMensaje =
   | { t: 'hola' | 'historial' }
   /** Las subcarpetas de `ruta`, para el explorador del chip «carpeta» */
@@ -51,6 +65,12 @@ export type ClienteMensaje =
   /** Manda un archivo del visor a la papelera (`id`: el bloque que lo nombró, para dejar de listarlo) */
   | { t: 'borrarArchivo'; ruta: string; cwd?: string; id?: string }
   | { t: 'guardarGrupos'; grupos: Grupos }
+  /** Pestaña GitHub: el estado de git de `cwd` y, con `red`, también lo de GitHub */
+  | { t: 'git'; cwd: string; red?: boolean }
+  /** El diff de un archivo (`ruta`, relativa a la raíz del repo) o de un commit */
+  | { t: 'gitDiff'; cwd: string; ruta?: string; commit?: string }
+  /** El registro de una prueba que falló, para ponerlo en la caja */
+  | { t: 'registroPrueba'; cwd: string; run: number; job?: number }
   | { t: 'abrirSesion'; sessionId: string; cwd: string; proveedor?: Proveedor }
   | { t: 'reanudar'; sessionId: string; cwd: string; proveedor?: Proveedor; texto?: string }
   | { t: 'foco'; visible: boolean }
@@ -74,6 +94,10 @@ export type ServidorMensaje =
   | { t: 'archivoBorrado'; ruta: string; cwd?: string; id?: string }
   | { t: 'enfocar'; agente: string }
   | { t: 'grupos'; grupos: Grupos }
+  | { t: 'git'; cwd: string; git?: EstadoGit; error?: string }
+  | { t: 'github'; cwd: string; github: InfoGithub }
+  | { t: 'gitDiff'; cwd: string; clave: string; texto?: string; error?: string }
+  | { t: 'registroPrueba'; cwd: string; texto: string; nombre?: string }
   | { t: 'aplicaciones'; ruta: string; apps: { id: string; nombre: string; predeterminada?: boolean }[] };
 export function aplicarOps(bloques: Bloque[], ops: Op[]): Bloque[] {
   const salida = [...bloques];

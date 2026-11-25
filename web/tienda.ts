@@ -1,13 +1,13 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
 /** `null`: un agente nuevo, todavía sin crear (se crea al mandar el primer mensaje) */
 export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string; proveedor?: Proveedor } | null;
 /** Con qué se crea el próximo agente; se recuerda entre sesiones */
 export type Borrador = { proveedor: Proveedor; modelo: string; esfuerzo: string; modo: PermissionMode; cwd: string };
-export type Panel = 'indice' | 'visor' | null;
+export type Panel = 'indice' | 'visor' | 'github' | null;
 
 function leerLocal<T>(clave: string, defecto: T): T { try { const v = localStorage.getItem(clave); return v ? { ...defecto, ...JSON.parse(v) } as T : defecto; } catch { return defecto; } }
 export function guardarLocal(clave: string, valor: unknown) { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch {} }
@@ -41,6 +41,12 @@ export const estado = {
   /** Lo que muestra el explorador de carpetas del chip «carpeta» (null mientras llega) */
   explorado: null as { pedida: string; ruta: string; carpetas: string[]; recortado?: boolean; aviso?: string } | null,
   primeraLista: false,
+  /** Pestaña GitHub, por carpeta del agente: lo de git (local) y lo de GitHub (internet, `fechaRed`: cuándo llegó) */
+  git: new Map<string, { git?: EstadoGit; error?: string; github?: InfoGithub; fechaRed?: number; pidiendoRed?: boolean }>(),
+  /** El diff que muestra la pestaña GitHub (`clave`: «ruta:…» o «commit:…») */
+  gitDiff: null as { cwd: string; clave: string; texto?: string; error?: string } | null,
+  /** La prueba cuyo registro se está trayendo («run:job») */
+  pidiendoRegistro: '',
 };
 
 const oyentes = new Set<() => void>();
@@ -113,6 +119,24 @@ export function explorar(ruta: string) { estado.explorado = null; enviar({ t: 'e
 export const claveArchivo = (ruta: string, cwd = '') => `${cwd}\0${ruta}`;
 /** Manda un archivo a la papelera del escritorio (se recupera desde el gestor de archivos) */
 export function borrarArchivo(ruta: string, cwd: string, id?: string) { enviar({ t: 'borrarArchivo', ruta, cwd, id }); }
+
+/** Lee git de la carpeta; con `red`, también GitHub (PR, pruebas, issues) */
+export function pedirGit(cwd: string, red: boolean) {
+  if (!cwd) return;
+  const i = estado.git.get(cwd) || {};
+  if (red) i.pidiendoRed = true;
+  estado.git.set(cwd, i); avisar();
+  enviar({ t: 'git', cwd, red });
+}
+export function verDiffGit(cwd: string, que: { ruta?: string; commit?: string }) {
+  estado.gitDiff = { cwd, clave: que.commit ? 'commit:' + que.commit : 'ruta:' + que.ruta };
+  avisar();
+  enviar({ t: 'gitDiff', cwd, ...que });
+}
+/** Escribe un encargo en la caja del agente (no lo manda: el usuario lo revisa y lo envía) */
+export function insertarEnCaja(texto: string) {
+  window.dispatchEvent(new CustomEvent('lyra-insertar', { detail: texto }));
+}
 
 /** Muestra un archivo en el visor (la ruta puede ser relativa a la carpeta del agente) */
 export function ver(ruta: string, cwd: string) {
@@ -215,7 +239,7 @@ function recibir(m: ServidorMensaje) {
     case 'limites': estado.limites = { limites: m.limites, fecha: m.fecha }; estado.pidiendoLimites = 0; break;
     case 'comandos': estado.comandos.set(m.agente, m.comandos); break;
     case 'explorado': { const { t: _, ...resto } = m; estado.explorado = resto; break; }
-    case 'error': mostrarError(m.texto); break;
+    case 'error': mostrarError(m.texto); estado.pidiendoRegistro = ''; break;
     case 'aviso': mostrarError(m.texto, 'info'); break;
     case 'borrada': {
       if (m.sessionId) { estado.documentos.delete(m.sessionId); estado.historial = estado.historial.filter(s => s.sessionId !== m.sessionId); }
@@ -230,6 +254,17 @@ function recibir(m: ServidorMensaje) {
       if (estado.visor?.ruta === m.ruta && estado.visor.cwd === (m.cwd || '')) estado.visor = null;
       break;
     }
+    case 'git': {
+      const i = estado.git.get(m.cwd) || {};
+      estado.git.set(m.cwd, { ...i, git: m.git, error: m.error, pidiendoRed: m.error ? false : i.pidiendoRed });
+      break;
+    }
+    case 'github': estado.git.set(m.cwd, { ...estado.git.get(m.cwd), github: m.github, fechaRed: Date.now(), pidiendoRed: false }); break;
+    case 'gitDiff': if (estado.gitDiff?.cwd === m.cwd && estado.gitDiff.clave === m.clave) estado.gitDiff = { ...estado.gitDiff, texto: m.texto, error: m.error }; break;
+    case 'registroPrueba':
+      estado.pidiendoRegistro = '';
+      insertarEnCaja(`Esta prueba automática (CI) falló. Encuentra la causa y arréglala; después dime qué cambiaste.\n\n\`\`\`\n${m.texto}\n\`\`\``);
+      break;
     case 'enfocar': if (estado.agentes.some(a => a.id === m.agente)) elegir({ tipo: 'agente', id: m.agente }); break;
   }
   avisar();

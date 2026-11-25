@@ -7,6 +7,7 @@ Una ventana para trabajar con varios agentes de programación a la vez —**Clau
 - **Sin diálogos:** el agente nuevo empieza al escribir. El proveedor, el modelo, el esfuerzo, los permisos y la carpeta son chips en la misma caja de texto, y se pueden cambiar en cualquier momento (Shift+Tab cambia los permisos, como en la terminal). El chip de la carpeta tiene sus carpetas recientes y un explorador para subir y bajar de nivel en el mismo menú, sin abrir otra ventana.
 - **Límites de uso a la vista:** abajo en la barra, cuánto usaste de Claude y de Codex (la ventana de 5 horas y la semanal), con la hora en que se renueva cada una. Se actualiza solo y al tocar «Uso».
 - **Permisos y preguntas en línea:** aprobar, rechazar con un motivo o responder sin salir del documento.
+- **GitHub al costado:** la rama de la carpeta del agente, los cambios sin commit (con su diff), los commits recientes, el PR de la rama con sus pruebas (CI) y los issues abiertos. Si una prueba falla, «Pasarle el error» pone su registro en la caja; cada issue tiene un botón para que lo resuelva el agente. Los botones solo escriben el encargo en la caja: tú decides si lo mandas.
 - **Visor al costado:** muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas de cálculo, sin abrir otra app. «Abrir con…» ofrece las apps de tu escritorio que abren ese archivo, y la papelera (dos clics) lo manda a la papelera del escritorio, de donde se recupera.
 - **Ventana propia:** GTK4 + WebKitGTK (unos 300 MB), no un navegador. También se puede usar desde un navegador.
 
@@ -22,6 +23,7 @@ Todo corre en tu computadora: un servidor local (127.0.0.1) maneja a los agentes
   - **Codex** (`codex`): se usa con `codex app-server`.
   - **Gemini CLI** (`gemini`): se usa con `gemini --acp`.
   - **Ollama** con un modelo que sepa usar herramientas (ver más abajo).
+- Opcional: **GitHub CLI** (`gh`) con `gh auth login`, para ver PRs, pruebas e issues en la pestaña GitHub. Sin él se ve todo lo de git.
 - Opcional: **LibreOffice**, para ver presentaciones, hojas de cálculo y documentos `.doc` en el visor. Los `.docx` y los PDF se ven sin él.
 
 ## Instalación
@@ -48,7 +50,7 @@ lyra-agentes --instalar  # la agrega al menú de aplicaciones
 
 **Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. Gemini CLI no informa su cuota a otras apps, así que su fila solo dice si tiene sesión. El agente local no tiene límites.
 
-Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor y Shift+Tab siguiente modo de permisos.
+Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub y Shift+Tab siguiente modo de permisos.
 
 ## Agente local (Ollama)
 
@@ -91,6 +93,7 @@ El estado se guarda en `~/.local/state/lyra-agentes/`: el token, las carpetas pr
 ## Seguridad
 
 - El servidor escucha solo en 127.0.0.1 y exige un token aleatorio, guardado con permisos 600, en cada conexión. Además comprueba el origen.
+- La pestaña GitHub solo lee: git sin fsmonitor, diff externo ni textconv (un repo ajeno no puede hacer que ejecute programas suyos) y `gh` con la sesión que ya tienes; la app no guarda tokens. Solo lee repos de tu carpeta personal, `/tmp` y `/mnt/shared`.
 - El visor solo muestra archivos de tu carpeta personal, `/tmp` y `/mnt/shared`, nunca de carpetas ocultas como `~/.ssh`. Resuelve los enlaces simbólicos antes de comprobar la ruta. El HTML se muestra sin scripts. Borrar desde el visor sigue las mismas reglas y nunca es definitivo: solo mueve a la papelera (en `/tmp`, que no tiene, no borra). El explorador de carpetas solo lista nombres de carpetas, sin las ocultas.
 - Borrar una conversación no es definitivo: las de Claude, Gemini y las locales van a la papelera del escritorio, y las de Codex se archivan.
 

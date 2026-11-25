@@ -18,6 +18,9 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'abrirArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true) && (m.app === undefined || typeof m.app === 'string' && /^[\w.+-]{1,200}\.desktop$/.test(m.app)); break;
     case 'aplicaciones': valido = texto('ruta') && !!m.ruta && texto('cwd', true); break;
     case 'borrarArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true) && (m.id === undefined || typeof m.id === 'string' && m.id.length <= 200); break;
+    case 'git': valido = texto('cwd') && !!m.cwd && (m.cwd as string).length <= 4096 && (m.red === undefined || typeof m.red === 'boolean'); break;
+    case 'gitDiff': valido = texto('cwd') && !!m.cwd && texto('ruta', true) && texto('commit', true) && (!!m.ruta !== !!m.commit); break;
+    case 'registroPrueba': valido = texto('cwd') && !!m.cwd && Number.isSafeInteger(m.run) && (m.run as number) > 0 && (m.job === undefined || Number.isSafeInteger(m.job) && (m.job as number) > 0); break;
     case 'guardarGrupos': valido = m.grupos !== null && typeof m.grupos === 'object'; break;
     case 'enviar': valido = texto('agente') && texto('texto'); break;
     case 'interrumpir': case 'cerrar': case 'leer': case 'comandos': valido = texto('agente'); break;
