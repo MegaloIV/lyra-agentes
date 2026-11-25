@@ -27,7 +27,7 @@ export function renuevaCorto(ms: number, ahora = Date.now()) {
   if (falta < 3600_000) return `en ${Math.max(1, Math.round(falta / 60_000))} min`;
   const h = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
   if (d.toDateString() === new Date(ahora).toDateString()) return h;
-  return `${d.toLocaleDateString('es', { weekday: 'short' }).replace('.', '')} ${d.getDate()}, ${h}`;
+  return `${d.toLocaleDateString('es', { weekday: 'short' }).replace('.', '')} ${d.getDate()} ${h}`;
 }
 
 export function haceCuanto(fecha: number): string {

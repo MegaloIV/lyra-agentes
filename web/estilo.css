@@ -118,9 +118,13 @@ button { cursor: pointer; }
 .limites-titulo:focus-visible { outline: 2px solid var(--lima); }
 .limites-nombre { color: var(--prov); font-weight: 500; }
 .limites-nota { grid-column: 2 / -1; color: var(--tenue); font-style: italic; }
-.limites-celda { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+/* Una celda a la vez: con el mouse encima, la barra se cambia por cuándo se renueva (en el mismo lugar) */
+.limites-celda { display: grid; min-width: 0; }
+.limites-celda > * { grid-area: 1 / 1; }
 .limites-uso { display: flex; align-items: center; gap: .4rem; min-width: 0; }
-.limites-renueva { color: var(--tenue); font-size: .66rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.limites-renueva { visibility: hidden; color: var(--texto); font-size: .7rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
+.limites-celda[data-renueva]:hover .limites-uso { visibility: hidden; }
+.limites-celda[data-renueva]:hover .limites-renueva { visibility: visible; }
 .limites-barra { flex: 1; min-width: 1.5rem; height: 4px; border-radius: 2px; background: var(--borde); overflow: hidden; }
 .limites-barra i { display: block; height: 100%; border-radius: 2px; background: var(--prov); }
 .limites-pct { flex: none; min-width: 2.4rem; text-align: right; font-variant-numeric: tabular-nums; }

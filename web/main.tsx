@@ -100,10 +100,12 @@ function guardarArchivo(nombre: string, texto: string) {
 }
 const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
 
-/** Ancho del panel derecho, uno por pestaña (índice, visor, GitHub, memorias); se cambia arrastrando su borde */
-const ANCHOS = { indice: 240, visor: 460, github: 380, memorias: 340, terminales: 460 };
-function leerAnchos(): Record<Exclude<Panel, null>, number> {
-  try { return { ...ANCHOS, ...JSON.parse(localStorage.getItem('lyra-anchos') || '{}') }; } catch { return { ...ANCHOS }; }
+/** Ancho del panel derecho: el mismo para todas las pestañas. Si arrastras el borde, esa pestaña guarda el suyo
+ *  hasta el botón «tamaños de siempre» (o doble clic en el borde) */
+const PANEL = 420;
+type Anchos = Partial<Record<Exclude<Panel, null>, number>>;
+function leerAnchos(): Anchos {
+  try { const a = JSON.parse(localStorage.getItem('lyra-anchos-propios') || '{}'); return a && typeof a === 'object' ? a : {}; } catch { return {}; }
 }
 
 /** Ancho de la barra de la izquierda (en px); se cambia arrastrando su borde derecho */
@@ -127,7 +129,7 @@ function App() {
   const ponerPanel = (p: Panel) => angosto ? setPanelAngosto(p) : abrirPanel(p);
   const alternar = (p: Exclude<Panel, null>) => ponerPanel(panel === p ? null : p);
   useEffect(() => { if (angosto && estado.panel === 'visor' && estado.visor) setPanelAngosto('visor'); }, [estado.visor?.vez]);
-  const [anchos, setAnchos] = useState(leerAnchos);
+  const [anchos, setAnchos] = useState<Anchos>(leerAnchos);
   const [anchoBarra, setAnchoBarra] = useState(leerBarra);
   const [cajon, setCajon] = useState(false);
   const [entradas, setEntradas] = useState<{ lista: Entrada[]; activo: string }>({ lista: [], activo: '' });
@@ -191,26 +193,26 @@ function App() {
   const exportar = () => doc ? aMarkdown(doc.bloques, titulo, quien, cwd) : '';
   const objetivo: Objetivo | undefined = agente ? { proveedor, titulo, agente: agente.id, sessionId: agente.sessionId, cwd, trabajando: agente.estado === 'trabajando' }
     : v?.tipo === 'sesion' ? { proveedor, titulo, sessionId: v.sessionId, cwd } : undefined;
-  const ancho = panel ? anchos[panel] : 0;
+  const ancho = panel ? anchos[panel] ?? PANEL : 0;
 
   function arrastrarBorde(e: PointerEvent) {
     if (!panel || angosto) return;
     e.preventDefault();
-    const inicio = e.clientX, base = anchos[panel], p = panel;
+    const inicio = e.clientX, base = anchos[panel] ?? PANEL, p = panel;
     let ultimo = base;
     const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + inicio - ev.clientX, 200), window.innerWidth * 0.6)); setAnchos(a => ({ ...a, [p]: ultimo })); };
-    const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); setAnchos(a => { guardarLocal('lyra-anchos', a); return a; }); document.body.classList.remove('arrastrando'); };
+    const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); setAnchos(a => { guardarLocal('lyra-anchos-propios', a); return a; }); document.body.classList.remove('arrastrando'); };
     document.body.classList.add('arrastrando');
     window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
   }
 
   /** Botón de la barra: todo vuelve al ancho con que viene (barra y cada pestaña del panel) */
   function tamanosDeSiempre() {
-    setAnchoBarra(BARRA); setAnchos({ ...ANCHOS });
-    try { localStorage.removeItem('lyra-barra'); localStorage.removeItem('lyra-anchos'); } catch { /* sin almacenamiento */ }
+    setAnchoBarra(BARRA); setAnchos({});
+    try { localStorage.removeItem('lyra-barra'); localStorage.removeItem('lyra-anchos'); localStorage.removeItem('lyra-anchos-propios'); } catch { /* sin almacenamiento */ }
     mostrarError('Tamaños de siempre', 'info');
   }
-  function anchoDeSiempre(p: Exclude<Panel, null>) { setAnchos(a => { const n = { ...a, [p]: ANCHOS[p] }; guardarLocal('lyra-anchos', n); return n; }); }
+  function anchoDeSiempre(p: Exclude<Panel, null>) { setAnchos(a => { const n = { ...a }; delete n[p]; guardarLocal('lyra-anchos-propios', n); return n; }); }
 
   function arrastrarBarra(e: PointerEvent) {
     if (matchMedia('(max-width: 760px)').matches) return;
