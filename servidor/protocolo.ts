@@ -50,6 +50,8 @@ export type InfoGithub = {
   pruebas?: PruebaGit[];
   issues?: { numero: number; titulo: string; url: string; cuerpo: string; etiquetas: string[]; autor?: string }[];
 };
+/** Una terminal del panel lateral (pestaña del gato); `numero`: el orden en que se abrió, para nombrarla */
+export type Consola = { id: string; cwd: string; titulo: string; numero: number; viva: boolean; codigo?: number };
 /** La batería de la laptop: porcentaje y si se está cargando */
 export type Bateria = { nivel: number; estado: 'cargando' | 'descargando' | 'llena' | 'enchufada' };
 export type ClienteMensaje =
@@ -90,7 +92,12 @@ export type ClienteMensaje =
   | { t: 'borrar'; proveedor: Proveedor; sessionId?: string; agente?: string }
   /** Todas las conversaciones de una carpeta de la barra, de una vez */
   | { t: 'borrarVarias'; sesiones: { proveedor: Proveedor; sessionId: string }[] }
-  | { t: 'renombrar'; proveedor: Proveedor; sessionId?: string; agente?: string; cwd?: string; titulo: string };
+  | { t: 'renombrar'; proveedor: Proveedor; sessionId?: string; agente?: string; cwd?: string; titulo: string }
+  /** Terminales del panel: abrir una en `cwd`, escribirle, cambiarle el tamaño, cerrarla o pedir todo lo que mostró */
+  | { t: 'consolaCrear'; cwd: string; cols: number; rows: number }
+  | { t: 'consolaEscribir'; id: string; datos: string }
+  | { t: 'consolaTamano'; id: string; cols: number; rows: number }
+  | { t: 'consolaCerrar' | 'consolaRepetir'; id: string };
 export type ServidorMensaje =
   | { t: 'agentes'; agentes: ResumenAgente[] }
   | { t: 'documento'; agente: string; bloques: Bloque[]; soloLectura?: boolean }
@@ -101,6 +108,9 @@ export type ServidorMensaje =
   | { t: 'catalogo'; proveedores: InfoProveedor[] }
   | { t: 'limites'; limites: Limite[]; fecha: number }
   | { t: 'error'; texto: string }
+  | { t: 'consolas'; consolas: Consola[] }
+  /** Salida de una terminal; `completo`: es todo lo guardado (se borra lo que había antes de escribirlo) */
+  | { t: 'consolaDatos'; id: string; datos: string; completo?: boolean }
   | { t: 'aviso'; texto: string }
   | { t: 'borrada'; sessionId?: string; agente?: string }
   | { t: 'archivoBorrado'; ruta: string; cwd?: string; id?: string }

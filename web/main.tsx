@@ -13,6 +13,7 @@ import { Bateria, Reloj } from './componentes/Reloj.tsx';
 import { Visor, archivosDe } from './componentes/Visor.tsx';
 import { Github } from './componentes/Github.tsx';
 import { Memorias } from './componentes/Memorias.tsx';
+import { Consolas } from './componentes/Consolas.tsx';
 import type { Bloque } from '@protocolo';
 import { aMarkdown, haceCuanto, nombreProveedor, rutaCorta } from './util.ts';
 
@@ -174,11 +175,14 @@ function App() {
     const tecla = (e: KeyboardEvent) => {
       if (document.querySelector('dialog[open]')) return;
       const k = e.key.toLowerCase();
+      // Dentro de una terminal las teclas son de la shell (Ctrl+R, Ctrl+K, Ctrl+T…), salvo la que alterna el panel
+      if ((e.target as HTMLElement | null)?.closest?.('.consola') && !(e.ctrlKey && e.shiftKey && k === 't')) return;
       if ((e.ctrlKey || e.altKey) && k === 'n') { e.preventDefault(); elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); return; }
       if (e.ctrlKey && k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('lyra-enfocar')); return; }
       if (e.ctrlKey && k === 'i') { e.preventDefault(); alternar('indice'); return; }
       if (e.ctrlKey && k === 'o') { e.preventDefault(); alternar('visor'); return; }
       if (e.ctrlKey && k === 'g') { e.preventDefault(); alternar('github'); return; }
+      if (e.ctrlKey && e.shiftKey && k === 't') { e.preventDefault(); alternar('consolas'); return; }
       if (e.ctrlKey && k === 't') { e.preventDefault(); alternar('terminales'); return; }
       if (e.ctrlKey && k === 'm') { e.preventDefault(); alternar('memorias'); return; }
       if (e.key === 'F2' && estado.vista) { e.preventDefault(); estado.editando = 'cabecera'; avisar(); return; }
@@ -250,6 +254,9 @@ function App() {
         <Icono nombre="terminal" />{(() => { const n = comandosTerminal(doc?.bloques || []).filter(corriendoTerminal).length; return n > 0 && <span class="terminales-contador">{n}</span>; })()}
       </button>
       <BotonIcono icono="memoria" titulo="Memorias de Claude, Codex y el local (Ctrl+M)" activo={panel === 'memorias'} onClick={() => alternar('memorias')} />
+      <button type="button" class="icono-boton terminales-pestana" aria-label="Mis terminales (Ctrl+Shift+T)" aria-pressed={panel === 'consolas'} onClick={() => alternar('consolas')}>
+        <Icono nombre="gato" />{(() => { const n = estado.consolas.filter(c => c.cwd === cwd && c.viva).length; return n > 0 && <span class="terminales-contador">{n}</span>; })()}
+      </button>
     </div>
   );
 
@@ -274,8 +281,7 @@ function App() {
               </div>
               {v && (
                 <div class="iconos-grupo">
-                  <BotonIcono icono="terminal" titulo="Abrir una terminal aquí" onClick={() => enviar({ t: 'abrir', con: 'terminal', cwd })} />
-                  <BotonIcono icono="carpeta" titulo="Abrir la carpeta" onClick={() => enviar({ t: 'abrir', con: 'carpeta', cwd })} />
+                  <BotonIcono icono="carpeta" titulo="Abrir la carpeta en un escritorio vacío" onClick={() => enviar({ t: 'abrir', con: 'carpetaAparte', cwd })} />
                   <BotonIcono icono="descargar" titulo="Guardar como Markdown (en Descargas)" onClick={() => guardarArchivo(nombreArchivo(titulo), exportar())} />
                   <BotonIcono icono="copiar" titulo="Copiar como Markdown" onClick={() => void navigator.clipboard.writeText(exportar()).then(() => mostrarError('Conversación copiada como Markdown', 'info'))} />
                 </div>
@@ -308,7 +314,7 @@ function App() {
         <aside class="panel" data-modo={panel}>
           <div class="panel-borde" onPointerDown={arrastrarBorde} onDblClick={() => anchoDeSiempre(panel)} />
           <header class="panel-cabecera">
-            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : panel === 'terminales' ? 'Terminales' : panel === 'memorias' ? 'Memorias' : 'Visor'}</span>
+            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : panel === 'terminales' ? 'Terminales' : panel === 'consolas' ? 'Mis terminales' : panel === 'memorias' ? 'Memorias' : 'Visor'}</span>
             <BotonIcono icono="cerrar" titulo="Cerrar el panel" onClick={() => ponerPanel(null)} />
           </header>
           <div class="panel-cuerpo">
@@ -317,6 +323,7 @@ function App() {
               : panel === 'github' ? <Github cwd={cwd} turnos={turnos} />
               : panel === 'terminales' ? <Terminales key={claveDoc} bloques={doc?.bloques || []} />
               : panel === 'memorias' ? <Memorias cwd={cwd} proveedor={proveedor} />
+              : panel === 'consolas' ? <Consolas cwd={cwd} />
               : <Visor bloques={doc?.bloques || []} cwd={cwd} />}
           </div>
         </aside>

@@ -22,6 +22,7 @@ import { avisarUsoClaude } from './claude.ts';
 import { anotarLimite, limites, listaLimites } from './limites.ts';
 import { diffGit, estadoGit, infoGithub, registroPrueba } from './git.ts';
 import { memorias } from './memorias.ts';
+import { Consolas } from './consolas.ts';
 // Si el servidor se lanzó desde una sesión de Claude Code, sus agentes heredarían estas variables y se
 // creerían sesiones hijas (no se guardan ni se pueden retomar).
 for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_AGENT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete process.env[k];
@@ -39,6 +40,7 @@ const alAbrir = (id: string) => {
   execFile(lanzador, [], () => { execFile('hyprctl', ['dispatch', 'focuswindow', 'class:io.lyra.Agentes'], () => {}); setTimeout(() => emitir({ t: 'enfocar', agente: id }), 600); });
 };
 const gestor = new GestorAgentes(emitir, crearNotificador(visible, alAbrir), id => [...clientes.values()].some(c => c.agente === id && c.visible && Date.now() - c.fecha < 2000));
+const consolas = new Consolas(emitir);
 const mandarCatalogo = async (fresco = false) => emitir({ t: 'catalogo', proveedores: await catalogo(fresco) });
 // Codex avisa solo cuando cambia su cuota; Claude, al terminar cada turno
 const nuevoLimite = (l?: ReturnType<typeof limiteCodex>) => { if (l) { anotarLimite(l); emitir({ t: 'limites', ...listaLimites() }); } };
@@ -92,7 +94,7 @@ servidor.on('upgrade', (req, socket, head) => {
       try {
         const m = validarMensaje(JSON.parse(datos.toString())), cliente = clientes.get(ws)!;
         switch (m.t) {
-          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); enviar(ws, { t: 'bateria', bateria: ultimaBateria }); break;
+          case 'hola': enviar(ws, { t: 'agentes', agentes: gestor.resumenes() }); for (const a of gestor.agentes.values()) enviar(ws, { t: 'documento', agente: a.id, bloques: a.bloques }); enviar(ws, { t: 'historial', sesiones: await gestor.historial() }); enviar(ws, { t: 'catalogo', proveedores: await catalogo() }); enviar(ws, { t: 'grupos', grupos: await leerGrupos() }); enviar(ws, { t: 'bateria', bateria: ultimaBateria }); enviar(ws, { t: 'consolas', consolas: consolas.resumen() }); break;
           case 'foco': cliente.visible = m.visible; cliente.fecha = Date.now(); break;
           case 'crear': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.prompt }); cliente.agente = a.id; break; }
           case 'reanudar': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, prompt: m.texto, reanudar: m.sessionId }); cliente.agente = a.id; break; }
@@ -158,11 +160,16 @@ servidor.on('upgrade', (req, socket, head) => {
           }
           case 'renombrar': await gestor.renombrar(m); emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'explorar': enviar(ws, { t: 'explorado', pedida: m.ruta, ...await explorar(m.ruta) }); break;
+          case 'consolaCrear': await consolas.crear(m.cwd, m.cols, m.rows); break;
+          case 'consolaEscribir': consolas.escribir(m.id, m.datos); break;
+          case 'consolaTamano': consolas.tamano(m.id, m.cols, m.rows); break;
+          case 'consolaCerrar': consolas.cerrar(m.id); break;
+          case 'consolaRepetir': { const r = consolas.repetir(m.id); if (r) enviar(ws, r); break; }
         }
       } catch (e) { enviar(ws, { t: 'error', texto: e instanceof Error ? e.message : 'Ocurrió un error inesperado.' }); }
     });
   });
 });
 servidor.listen(puerto, '127.0.0.1', () => console.log(`Lyra (agentes) escuchando en http://127.0.0.1:${puerto}`));
-function cerrar() { for (const id of [...gestor.agentes.keys()]) gestor.cerrar(id); cerrarCodex(); for (const ws of clientes.keys()) ws.close(1001, 'Lyra se cerró'); wss.close(); servidor.close(); }
+function cerrar() { consolas.cerrarTodas(); for (const id of [...gestor.agentes.keys()]) gestor.cerrar(id); cerrarCodex(); for (const ws of clientes.keys()) ws.close(1001, 'Lyra se cerró'); wss.close(); servidor.close(); }
 process.once('SIGINT', cerrar); process.once('SIGTERM', cerrar);

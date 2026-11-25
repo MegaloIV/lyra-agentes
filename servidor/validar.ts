@@ -33,6 +33,10 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
       && m.sesiones.every((x: any) => x && typeof x === 'object' && proveedores.includes(String(x.proveedor)) && typeof x.sessionId === 'string' && x.sessionId.length > 0 && x.sessionId.length <= 200); break;
     case 'renombrar': valido = proveedores.includes(String(m.proveedor)) && texto('sessionId', true) && texto('agente', true) && texto('cwd', true) && (!!m.sessionId || !!m.agente)
       && typeof m.titulo === 'string' && m.titulo.trim().length > 0 && m.titulo.length <= 200; break;
+    case 'consolaCrear': valido = texto('cwd') && (m.cwd as string).length <= 4096 && [m.cols, m.rows].every(n => Number.isSafeInteger(n) && (n as number) > 0 && (n as number) <= 1000); break;
+    case 'consolaEscribir': valido = texto('id') && (m.id as string).length <= 100 && typeof m.datos === 'string' && m.datos.length <= 100000; break;
+    case 'consolaTamano': valido = texto('id') && (m.id as string).length <= 100 && [m.cols, m.rows].every(n => Number.isSafeInteger(n) && (n as number) > 0 && (n as number) <= 1000); break;
+    case 'consolaCerrar': case 'consolaRepetir': valido = texto('id') && (m.id as string).length <= 100; break;
     case 'responder': valido = texto('agente') && texto('solicitud') && ['permitir', 'siempre', 'rechazar'].includes(String(m.decision)) && texto('mensaje', true) && (m.respuestas === undefined || m.respuestas !== null && typeof m.respuestas === 'object' && !Array.isArray(m.respuestas) && Object.values(m.respuestas).every(v => typeof v === 'string')); break;
   }
   if (!valido) throw new Error('El mensaje recibido no es válido.');

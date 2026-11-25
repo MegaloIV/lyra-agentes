@@ -1,13 +1,13 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub, MemoriasProveedor, Bateria } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub, MemoriasProveedor, Bateria, Consola } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
 /** `null`: un agente nuevo, todavía sin crear (se crea al mandar el primer mensaje) */
 export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string; proveedor?: Proveedor } | null;
 /** Con qué se crea el próximo agente; se recuerda entre sesiones */
 export type Borrador = { proveedor: Proveedor; modelo: string; esfuerzo: string; modo: PermissionMode; cwd: string };
-export type Panel = 'indice' | 'visor' | 'github' | 'memorias' | 'terminales' | null;
+export type Panel = 'indice' | 'visor' | 'github' | 'memorias' | 'terminales' | 'consolas' | null;
 
 function leerLocal<T>(clave: string, defecto: T): T { try { const v = localStorage.getItem(clave); const datos = v ? JSON.parse(v) : {}; if (datos.proveedor && !['claude', 'codex', 'local'].includes(datos.proveedor)) return defecto; return { ...defecto, ...datos } as T; } catch { return defecto; } }
 export function guardarLocal(clave: string, valor: unknown) { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch {} }
@@ -51,7 +51,16 @@ export const estado = {
   memorias: new Map<string, { proveedores?: MemoriasProveedor[]; error?: string; pidiendo?: boolean }>(),
   /** Batería de la laptop (null: no hay o todavía no llegó) */
   bateria: null as Bateria | null,
+  /** Terminales propias del panel del gato (viven en el servidor) */
+  consolas: [] as Consola[],
 };
+
+/** La salida de cada terminal va directo a su xterm, sin pasar por el dibujo de Preact */
+const oyentesConsola = new Map<string, (datos: string, completo?: boolean) => void>();
+export function oirConsola(id: string, f: (datos: string, completo?: boolean) => void) {
+  oyentesConsola.set(id, f);
+  return () => { if (oyentesConsola.get(id) === f) oyentesConsola.delete(id); };
+}
 
 const oyentes = new Set<() => void>();
 let programado = false;
@@ -278,6 +287,8 @@ function recibir(m: ServidorMensaje) {
       break;
     }
     case 'bateria': estado.bateria = m.bateria; break;
+    case 'consolas': estado.consolas = m.consolas; break;
+    case 'consolaDatos': oyentesConsola.get(m.id)?.(m.datos, m.completo); return;
     case 'archivoGuardado': { const k = claveArchivo(m.ruta, m.cwd); guardando.get(k)?.({ error: m.error, modificado: m.modificado }); guardando.delete(k); break; }
     case 'memorias': estado.memorias.set(m.cwd, { proveedores: m.proveedores, error: m.error, pidiendo: false }); break;
     case 'git': {
