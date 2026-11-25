@@ -31,6 +31,11 @@ from gi.repository import Gdk, Gio, GLib, Gtk, WebKit  # noqa: E402
 TRANSPARENTE = "rgba(0,0,0,0)"
 DATOS = os.path.join(GLib.get_user_data_dir(), "lyra-agentes", "web")
 CACHE = os.path.join(GLib.get_user_cache_dir(), "lyra-agentes")
+# Del menú del clic derecho (o el toque con dos dedos) solo queda lo que sirve para el texto: no es un navegador,
+# así que nada de Atrás, Adelante, Recargar ni «Abrir en otra ventana». Donde no hay texto no sale ningún menú.
+A = WebKit.ContextMenuAction
+UTILES = {A.COPY, A.CUT, A.PASTE, A.PASTE_AS_PLAIN_TEXT, A.DELETE, A.SELECT_ALL, A.INSERT_EMOJI, A.COPY_LINK_TO_CLIPBOARD,
+          A.COPY_IMAGE_TO_CLIPBOARD, A.SPELLING_GUESS, A.NO_GUESSES_FOUND, A.IGNORE_SPELLING, A.LEARN_SPELLING, A.IGNORE_GRAMMAR}
 DESCARGAS = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or os.path.expanduser("~")
 
 
@@ -71,6 +76,7 @@ class Ventana(Gtk.Application):
         color.parse(TRANSPARENTE)
         vista.set_background_color(color)
         vista.connect("decide-policy", self.al_decidir)
+        vista.connect("context-menu", self.al_menu)
         vista.connect("notify::title", lambda v, _p: self.ventana and self.ventana.set_title(v.get_title() or "Lyra"))
         vista.connect("web-process-terminated", lambda v, _r: GLib.timeout_add(500, lambda: v.reload() and False))
 
@@ -126,6 +132,22 @@ class Ventana(Gtk.Application):
         else:
             return False
         return True
+
+    def al_menu(self, _v, menu: WebKit.ContextMenu, _hit) -> bool:
+        """Deja solo las acciones de texto (y «Inspeccionar» con --depurar). True: no se muestra nada."""
+        utiles = UTILES | ({A.INSPECT_ELEMENT} if "--depurar" in sys.argv else set())
+        for item in list(menu.get_items()):
+            if not item.is_separator() and item.get_stock_action() not in utiles:
+                menu.remove(item)
+        items = menu.get_items()
+        while items and items[0].is_separator():      # sin separadores sueltos al principio, al final ni seguidos
+            menu.remove(items.pop(0))
+        while items and items[-1].is_separator():
+            menu.remove(items.pop())
+        for anterior, item in zip(items, items[1:]):
+            if anterior.is_separator() and item.is_separator():
+                menu.remove(item)
+        return not menu.get_items()
 
     def al_decidir(self, _v, decision, tipo) -> bool:
         """Solo se navega dentro del servidor local; lo demás va al navegador del sistema."""

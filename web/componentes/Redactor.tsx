@@ -8,6 +8,9 @@ import { Icono } from './iconos.tsx';
 import { PROVEEDORES, cronometro, horaDe, info, miles, tokensCortos, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
 
 const borradores = new Map<string, string>();
+/** Con qué se retoma una conversación del historial (vacío: el modelo y el esfuerzo predeterminados) */
+type Reanudo = { modelo: string; esfuerzo: string; modo: PermissionMode };
+const SIN_CAMBIOS: Reanudo = { modelo: '', esfuerzo: '', modo: 'default' };
 const clave = (v: Vista) => v?.tipo === 'agente' ? v.id : v?.tipo === 'sesion' ? v.sessionId : 'nuevo';
 
 const TEXTO_ESTADO: Record<string, string> = {
@@ -73,28 +76,31 @@ function Explorador({ desde, alElegir }: { desde: string; alElegir: (ruta: strin
   );
 }
 
-/** Los ajustes: del agente abierto (se cambian al vuelo) o del agente nuevo (se guardan para la próxima vez) */
-function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boolean; solo?: Proveedor }) {
+/** Los ajustes: del agente abierto (se cambian al vuelo), del agente nuevo (se guardan para la próxima vez)
+ *  o de la conversación del historial que se va a retomar (valen para ese agente) */
+function Ajustes({ agente, nuevo, sesion, reanudo, cambiarReanudo }: { agente?: ResumenAgente; nuevo: boolean; sesion?: { proveedor?: Proveedor; cwd: string }; reanudo: Reanudo; cambiarReanudo: (c: Partial<Reanudo>) => void }) {
   const [abierto, setAbierto] = useState('');
   const cerrar = () => setAbierto('');
   const b = estado.borrador;
-  const proveedor = agente?.proveedor || (nuevo ? b.proveedor : solo) || 'claude';
+  const proveedor = agente?.proveedor || (nuevo ? b.proveedor : sesion?.proveedor) || 'claude';
+  const propios = nuevo ? b : reanudo;
   const datos = info(proveedor);
-  const { nombre: nombreDelModelo, modelo } = modeloDe(proveedor, agente ? agente.modelo : b.modelo || undefined);
+  const { nombre: nombreDelModelo, modelo } = modeloDe(proveedor, agente ? agente.modelo : propios.modelo || undefined);
   const esfuerzos = modelo?.esfuerzos || [];
-  const esfuerzo = agente ? agente.esfuerzo : esfuerzos.includes(b.esfuerzo) ? b.esfuerzo : '';
-  const modo = agente?.modo || (nuevo ? b.modo : 'default');
+  const esfuerzo = agente ? agente.esfuerzo : esfuerzos.includes(propios.esfuerzo) ? propios.esfuerzo : '';
+  const modo = agente?.modo || propios.modo;
   const modos = datos?.modos || [{ valor: 'default' as const, nombre: 'Preguntar' }];
-  const cwd = agente?.cwd || b.cwd;
+  const cwd = agente?.cwd || sesion?.cwd || b.cwd;
   const recientes = [...new Set([...estado.agentes.map(a => a.cwd), ...estado.historial.map(s => s.cwd)].filter(Boolean))].slice(0, 12);
   const [ruta, setRuta] = useState('');
   const [explorando, setExplorando] = useState(false);
 
-  const ponerModelo = (v: string | null) => { if (agente) enviar({ t: 'modelo', agente: agente.id, modelo: v }); else cambiarBorrador({ modelo: v || '' }); cerrar(); };
-  const ponerEsfuerzo = (v: string | null) => { if (agente) enviar({ t: 'esfuerzo', agente: agente.id, esfuerzo: v }); else cambiarBorrador({ esfuerzo: v || '' }); cerrar(); };
-  const ponerModo = (v: PermissionMode) => { if (agente) enviar({ t: 'modo', agente: agente.id, modo: v }); else cambiarBorrador({ modo: v }); cerrar(); };
+  const cambiar = nuevo ? cambiarBorrador : cambiarReanudo;
+  const ponerModelo = (v: string | null) => { if (agente) enviar({ t: 'modelo', agente: agente.id, modelo: v }); else cambiar({ modelo: v || '' }); cerrar(); };
+  const ponerEsfuerzo = (v: string | null) => { if (agente) enviar({ t: 'esfuerzo', agente: agente.id, esfuerzo: v }); else cambiar({ esfuerzo: v || '' }); cerrar(); };
+  const ponerModo = (v: PermissionMode) => { if (agente) enviar({ t: 'modo', agente: agente.id, modo: v }); else cambiar({ modo: v }); cerrar(); };
 
-  if (!agente && !nuevo) return <span class="chip" data-chip="proveedor" data-proveedor={proveedor}><span class="proveedor-punto" />{nombreProveedor(proveedor)}</span>;
+  if (!agente && !nuevo && !sesion) return <span class="chip" data-chip="proveedor" data-proveedor={proveedor}><span class="proveedor-punto" />{nombreProveedor(proveedor)}</span>;
   return (
     <>
       {nuevo ? (
@@ -122,8 +128,8 @@ function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boole
       )}
 
       <Chip id="modo" abierto={abierto} setAbierto={setAbierto} titulo="" datos={{ 'data-modo': modo }} texto={<><Icono nombre="escudo" tam={12} />{nombreModo(modo, proveedor)}</>}>
-        {/* «Sin preguntar» solo al crear: los proveedores no lo aceptan después */}
-        {modos.filter(m => nuevo || m.valor !== 'bypassPermissions').map(m => <Opcion key={m.valor} actual={m.valor === modo} al={() => ponerModo(m.valor)}>{m.nombre}</Opcion>)}
+        {/* «Sin preguntar» solo al crear o retomar: los proveedores no lo aceptan después */}
+        {modos.filter(m => !agente || m.valor !== 'bypassPermissions').map(m => <Opcion key={m.valor} actual={m.valor === modo} al={() => ponerModo(m.valor)}>{m.nombre}</Opcion>)}
       </Chip>
 
       {nuevo ? (
@@ -153,10 +159,12 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   const [elegido, setElegido] = useState(0);
   const [popupCerrado, setPopupCerrado] = useState(false);
   const [avisoEsc, setAvisoEsc] = useState(0);
+  const [reanudo, setReanudo] = useState<Reanudo>(SIN_CAMBIOS);
+  const cambiarReanudo = (c: Partial<Reanudo>) => setReanudo(r => ({ ...r, ...c }));
   const k = clave(vista);
   const nuevo = vista === null;
 
-  useEffect(() => { prefijo.current = 0; setTexto(borradores.get(k) || ''); setElegido(0); setPopupCerrado(false); caja.current?.focus(); }, [k]);
+  useEffect(() => { prefijo.current = 0; setTexto(borradores.get(k) || ''); setElegido(0); setPopupCerrado(false); setReanudo(SIN_CAMBIOS); caja.current?.focus(); }, [k]);
   useEffect(() => { borradores.set(k, texto); }, [texto, k]);
   useLayoutEffect(() => {
     const t = caja.current; if (!t) return;
@@ -206,7 +214,11 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
       let cwd = b.cwd.trim() || '~/'; if (cwd === '~') cwd = '~/';
       crearAgente({ t: 'crear', cwd, proveedor: b.proveedor, modelo: b.modelo || undefined, esfuerzo: modelo?.esfuerzos?.includes(b.esfuerzo) ? b.esfuerzo : undefined, modo: b.modo, prompt: t });
     }
-    else if (vista?.tipo === 'sesion') crearAgente({ t: 'reanudar', sessionId: vista.sessionId, cwd: vista.cwd, proveedor: vista.proveedor, texto: t });
+    else if (vista?.tipo === 'sesion') {
+      const esfuerzos = modeloDe(vista.proveedor || 'claude', reanudo.modelo || undefined).modelo?.esfuerzos;
+      crearAgente({ t: 'reanudar', sessionId: vista.sessionId, cwd: vista.cwd, proveedor: vista.proveedor, texto: t, modelo: reanudo.modelo || undefined,
+        esfuerzo: esfuerzos?.includes(reanudo.esfuerzo) ? reanudo.esfuerzo : undefined, modo: reanudo.modo === 'default' ? undefined : reanudo.modo });
+    }
     else if (agente?.estado === 'error' && agente.sessionId) crearAgente({ t: 'reanudar', sessionId: agente.sessionId, cwd: agente.cwd, proveedor: agente.proveedor, texto: t });
     else if (agente) enviar({ t: 'enviar', agente: agente.id, texto: t, ...(ya && trabajando ? { ya: true } : {}) });
     else return;
@@ -222,11 +234,11 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
 
   /** Shift+Tab: siguiente modo de permisos, como en la terminal */
   function siguienteModo() {
-    const proveedor = agente?.proveedor || b.proveedor;
+    const proveedor = agente?.proveedor || (vista?.tipo === 'sesion' ? vista.proveedor || 'claude' : b.proveedor);
     const ciclo = (info(proveedor)?.modos.map(m => m.valor) || ['default']).filter(m => m !== 'bypassPermissions') as PermissionMode[];
-    const actual = agente?.modo || b.modo;
+    const actual = agente?.modo || (vista?.tipo === 'sesion' ? reanudo.modo : b.modo);
     const sig = ciclo[(ciclo.indexOf(actual) + 1) % ciclo.length] || 'default';
-    if (agente) enviar({ t: 'modo', agente: agente.id, modo: sig }); else cambiarBorrador({ modo: sig });
+    if (agente) enviar({ t: 'modo', agente: agente.id, modo: sig }); else if (vista?.tipo === 'sesion') cambiarReanudo({ modo: sig }); else cambiarBorrador({ modo: sig });
   }
 
   function tecla(e: KeyboardEvent) {
@@ -258,7 +270,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && buscando?.[1] !== filtrados[indice]!.nombre.replace(/^\//, ''))) { e.preventDefault(); completar(indice); return; }
       if (e.key === 'Escape') { e.preventDefault(); setPopupCerrado(true); return; }
     }
-    if (e.key === 'Tab' && e.shiftKey && (nuevo || agente)) { e.preventDefault(); siguienteModo(); return; }
+    if (e.key === 'Tab' && e.shiftKey && (nuevo || agente || vista?.tipo === 'sesion')) { e.preventDefault(); siguienteModo(); return; }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); mandar(); return; }
     if (e.key === 'Escape' && trabajando && agente) {
       e.preventDefault();
@@ -302,7 +314,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
           onInput={e => { setTexto((e.currentTarget as HTMLTextAreaElement).value); setPopupCerrado(false); setElegido(0); }}
           onKeyDown={tecla} onBlur={() => { prefijo.current = 0; }} />
         <div class="redactor-barra">
-          <div class="ajustes"><Ajustes agente={agente} nuevo={nuevo} solo={vista?.tipo === 'sesion' ? vista.proveedor : undefined} /></div>
+          <div class="ajustes"><Ajustes agente={agente} nuevo={nuevo} sesion={!agente && vista?.tipo === 'sesion' ? vista : undefined} reanudo={reanudo} cambiarReanudo={cambiarReanudo} /></div>
           {agente?.estado === 'error' && agente.sessionId && <button type="button" class="icono-boton" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd, proveedor: agente.proveedor })}><Icono nombre="recargar" /></button>}
           {trabajando && <button type="button" class="boton-detener" aria-label="Detener" onClick={() => agente && enviar({ t: 'interrumpir', agente: agente.id })}><Icono nombre="detener" /></button>}
           <button type="button" class="boton-enviar" aria-label="Enviar" disabled={!texto.trim() || !!falta} onClick={() => mandar()}><Icono nombre="enviar" /></button>

@@ -102,7 +102,7 @@ export type ClienteMensaje =
   /** El registro de una prueba que falló, para ponerlo en la caja */
   | { t: 'registroPrueba'; cwd: string; run: number; job?: number }
   | { t: 'abrirSesion'; sessionId: string; cwd: string; proveedor?: Proveedor }
-  | { t: 'reanudar'; sessionId: string; cwd: string; proveedor?: Proveedor; texto?: string }
+  | { t: 'reanudar'; sessionId: string; cwd: string; proveedor?: Proveedor; texto?: string; modelo?: string; esfuerzo?: string; modo?: PermissionMode }
   | { t: 'foco'; visible: boolean }
   /** Con `agente`, el agente abierto (se cierra antes); si no, una del historial */
   | { t: 'borrar'; proveedor: Proveedor; sessionId?: string; agente?: string }

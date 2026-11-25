@@ -12,7 +12,8 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
     case 'limites': valido = m.fresco === undefined || typeof m.fresco === 'boolean'; break;
     case 'foco': valido = typeof m.visible === 'boolean'; break;
     case 'crear': valido = texto('cwd') && !!m.cwd && texto('modelo', true) && texto('esfuerzo', true) && texto('prompt', true) && proveedorValido(m.proveedor) && (m.modo === undefined || modos.includes(m.modo as PermissionMode)); break;
-    case 'abrirSesion': case 'reanudar': valido = texto('sessionId') && !!m.sessionId && texto('cwd') && !!m.cwd && texto('texto', true) && proveedorValido(m.proveedor); break;
+    case 'abrirSesion': case 'reanudar': valido = texto('sessionId') && !!m.sessionId && texto('cwd') && !!m.cwd && texto('texto', true) && proveedorValido(m.proveedor)
+      && texto('modelo', true) && texto('esfuerzo', true) && (m.modo === undefined || modos.includes(m.modo as PermissionMode)); break;
     case 'esfuerzo': valido = texto('agente') && (m.esfuerzo === null || texto('esfuerzo')); break;
     case 'abrir': valido = ['terminal', 'carpeta', 'carpetaAparte'].includes(String(m.con)) && texto('cwd', true); break;
     case 'abrirArchivo': valido = texto('ruta') && !!m.ruta && texto('cwd', true) && (m.app === undefined || typeof m.app === 'string' && /^[\w.+-]{1,200}\.desktop$/.test(m.app)); break;

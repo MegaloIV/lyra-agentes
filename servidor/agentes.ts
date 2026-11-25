@@ -94,7 +94,13 @@ export class GestorAgentes implements Contexto {
     const { reanudar, prompt } = opciones;
     if (reanudar) {
       const existente = [...this.agentes.values()].find(a => a.sessionId === reanudar && a.proveedor === proveedor);
-      if (existente) { if (existente.estado === 'error') existente.motor.iniciar(); if (prompt) this.enviar(existente.id, prompt); this.emitir({ t: 'documento', agente: existente.id, bloques: existente.bloques }); return existente; }
+      if (existente) {
+        // Los ajustes elegidos al retomar también valen si la conversación ya estaba abierta
+        if (opciones.modelo && opciones.modelo !== existente.modelo) await existente.motor.modelo(opciones.modelo);
+        if (opciones.esfuerzo && opciones.esfuerzo !== existente.esfuerzo) await existente.motor.esfuerzo(opciones.esfuerzo);
+        if (opciones.modo && opciones.modo !== existente.modo && opciones.modo !== 'bypassPermissions') await existente.motor.modo(opciones.modo);
+        if (existente.estado === 'error') existente.motor.iniciar(); if (prompt) this.enviar(existente.id, prompt); this.emitir({ t: 'documento', agente: existente.id, bloques: existente.bloques }); return existente;
+      }
     }
     let bloques: Bloque[] = [], titulo: string | undefined, normalizador;
     if (reanudar) {
