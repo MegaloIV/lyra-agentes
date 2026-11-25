@@ -117,7 +117,7 @@ npm run typecheck
 - `web/` es la interfaz, hecha con Preact.
 - `ventana/ventana.py` es la ventana GTK.
 
-En la caja: Ctrl+C sin selección detiene el agente; Ctrl+X seguido de Ctrl+S en 1,5 segundos envía ya: si el agente está trabajando, lo interrumpe y manda el mensaje enseguida (Enter, en cambio, lo deja en cola). Con selección se conservan copiar y cortar; sin ella, Ctrl+X no hace nada (antes sonaba). Ctrl+S solo no guarda la página. Ctrl+U borra todo lo escrito en la caja (y los adjuntos); Ctrl+Z lo recupera. El contador «Pensando…» flota sobre la caja, y los ajustes se compactan si la caja se angosta, así nada se descuadra.
+En la caja: Ctrl+C sin selección detiene el agente; Ctrl+X seguido de Ctrl+S en 1,5 segundos envía ya: si el agente está trabajando, lo interrumpe y manda el mensaje enseguida (Enter, en cambio, lo deja en cola). Con selección se conservan copiar y cortar; sin ella, Ctrl+X no hace nada (antes sonaba). Ctrl+S solo no guarda la página. Ctrl+U borra todo lo escrito en la caja (y los adjuntos); Ctrl+Z, si todavía no escribiste otra cosa, lo devuelve todo. El contador «Pensando…» flota sobre la caja, y los ajustes se compactan si la caja se angosta, así nada se descuadra.
 
 Sobre la caja, **Ir al final** aparece cuando te alejas del final y se oculta al volver abajo. Si escribes mientras
 el agente responde, el documento deja de seguir la respuesta hasta que vuelvas al final.

@@ -186,6 +186,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   const ajustes = useRef<HTMLDivElement>(null);
   useCompactar(ajustes);
   const componiendo = useRef(false);
+  /** Lo último que borró Ctrl+U, para que Ctrl+Z lo devuelva */
+  const borrado = useRef<{ clave: string; texto: string; adjuntos: Adjunto[] } | null>(null);
   const [texto, actualizarTexto] = useState(() => borradores.get(clave(vista)) || '');
   const [adjuntos, setAdjuntos] = useState<Adjunto[]>(() => archivosBorrador.get(clave(vista)) || []);
   const [subiendo, setSubiendo] = useState(0);
@@ -340,12 +342,19 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
       prefijo.current = 0; return;
     }
     if (!['Control', 'Shift'].includes(e.key)) prefijo.current = 0;
-    // Ctrl+U: borra todo lo escrito y los adjuntos. Va como una edición, así Ctrl+Z lo recupera
+    // Ctrl+U: borra todo lo escrito y los adjuntos; Ctrl+Z, mientras no se escriba otra cosa, los devuelve.
+    // Se guarda aquí y no se confía en el deshacer de WebKit, que en la ventana no lo recuperaba.
     if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && letra === 'u') {
       e.preventDefault();
-      const c = caja.current;
-      if (c && c.value) { c.focus(); c.select(); if (!document.execCommand('delete')) setTexto(''); }
-      archivosBorrador.delete(k); setAdjuntos([]);
+      if (texto || adjuntos.length) borrado.current = { clave: k, texto, adjuntos };
+      setTexto(''); archivosBorrador.delete(k); setAdjuntos([]);
+      return;
+    }
+    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && letra === 'z' && borrado.current?.clave === k && !caja.current?.value) {
+      e.preventDefault();
+      const b = borrado.current; borrado.current = null;
+      archivosBorrador.set(k, b.adjuntos); setAdjuntos(b.adjuntos); setTexto(b.texto);
+      requestAnimationFrame(() => { const c = caja.current; if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); } });
       return;
     }
     if (e.ctrlKey && letra === 'c') {
@@ -410,7 +419,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
           }}><Icono nombre="cerrar" tam={11} /></button></span>)}</div>}
         <textarea ref={caja} class="redactor-texto" rows={1}
           placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : nuevo ? `¿Qué hacemos? (Enter envía · Shift+Enter, nueva línea)` : `Escribe a ${quien}…`}
-          onInput={e => { e.currentTarget.dataset.escribiendo = String(Date.now()); setTexto(e.currentTarget.value); setPopupCerrado(false); setElegido(0); }}
+          onInput={e => { if (e.currentTarget.value) borrado.current = null; e.currentTarget.dataset.escribiendo = String(Date.now()); setTexto(e.currentTarget.value); setPopupCerrado(false); setElegido(0); }}
           onCompositionStart={() => { componiendo.current = true; }}
           onCompositionEnd={e => { componiendo.current = false; setTexto(e.currentTarget.value); }}
           onPaste={e => { if (recibirArchivos(e.clipboardData)) e.preventDefault(); }}
