@@ -39,6 +39,9 @@ export function bloqueUsuario(texto: string, enCola: boolean, id: string = rando
 /** «You've hit your usage limit… try again at 2:52 PM.» → «Se acabó tu cuota de Codex. Vuelve a estar disponible a las 2:52 PM.» */
 export function errorLegible(texto: string, proveedor: string): string {
   const limpio = texto.trim();
+  if (proveedor === 'Codex' && /already has an active writer/i.test(limpio)) {
+    return 'Esta conversación está abierta para escritura en otra instancia de Codex (terminal o app). Cierra esa sesión allí y vuelve a reanudarla aquí. Detener la respuesta no basta si la sesión sigue abierta. Puedes seguir leyendo el historial en LyraAgentes.';
+  }
   if (/usage limit|rate limit|quota|RESOURCE_EXHAUSTED|429/i.test(limpio)) {
     const hora = /try again (?:at|in) ([^.]+)/i.exec(limpio)?.[1];
     return `Se acabó tu cuota de ${proveedor}.` + (hora ? ` Vuelve a estar disponible ${/^\d/.test(hora) ? 'a las ' : 'en '}${hora}.` : ' Prueba más tarde.');

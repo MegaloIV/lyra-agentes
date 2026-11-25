@@ -14,7 +14,6 @@ export const MODOS_CLAUDE: InfoProveedor['modos'] = [
 
 /** Si Claude Code no responde a tiempo */
 const RESPALDO_CLAUDE: Modelo[] = [
-  { valor: null, nombre: 'Predeterminado' },
   { valor: 'opus', nombre: 'Opus', esfuerzos: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { valor: 'sonnet', nombre: 'Sonnet', esfuerzos: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { valor: 'haiku', nombre: 'Haiku' },
@@ -24,7 +23,7 @@ let claude: Modelo[] | undefined, pidiendo: Promise<Modelo[]> | undefined;
 async function modelos(): Promise<Modelo[]> {
   if (claude) return conEsfuerzoClaude(claude);
   pidiendo ??= modelosClaude().then(l => (claude = l.length ? l : RESPALDO_CLAUDE)).catch(() => RESPALDO_CLAUDE).finally(() => { pidiendo = undefined; });
-  return pidiendo;
+  return conEsfuerzoClaude(await pidiendo);
 }
 
 let ultimo: InfoProveedor[] | undefined, armando: Promise<InfoProveedor[]> | undefined;

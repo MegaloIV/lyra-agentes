@@ -71,6 +71,11 @@ El proveedor **Local** usa el mismo Claude Code, pero apuntado a un Ollama de tu
 
 ## Configuración
 
+En LyraAgentes, Claude empieza con **Opus 5.5** (`claude-opus-5-5`). Para Claude y Codex,
+**Normal** equivale a esfuerzo **Alto** (`high`), tanto al crear como al retomar una sesión o volver
+a elegir Normal. Las selecciones explícitas se respetan. El modelo predeterminado de Codex sigue
+siendo el de su configuración; su menú se obtiene del catálogo de `codex app-server`.
+
 Variables de entorno; también se pueden escribir, una por línea, en `~/.config/lyra-agentes/entorno`, que el lanzador lee al arrancar:
 
 | Variable | Para qué |
@@ -113,5 +118,12 @@ npm run typecheck
 - `ventana/ventana.py` es la ventana GTK.
 
 En la caja: Ctrl+C sin selección detiene el agente; Ctrl+X seguido de Ctrl+S en 1,5 segundos envía ya: si el agente está trabajando, lo interrumpe y manda el mensaje enseguida (Enter, en cambio, lo deja en cola). Con selección se conservan copiar y cortar; sin ella, Ctrl+X no hace nada (antes sonaba). Ctrl+S solo no guarda la página. El contador «Pensando…» flota sobre la caja, y los ajustes se compactan si la caja se angosta, así nada se descuadra.
+
+Sobre la caja, **Ir al final** aparece cuando te alejas del final y se oculta al volver abajo. Si escribes mientras
+el agente responde, el documento deja de seguir la respuesta hasta que vuelvas al final.
+Puedes pegar imágenes del portapapeles, pegar o arrastrar archivos, o elegirlos con **+**. Se muestran como
+`[imagen 1]`, `[archivo 1]`, etc.; al enviar se añaden sus rutas locales al mensaje. Las subidas tienen un límite
+de 25 MB por archivo y se conservan en `~/.local/state/lyra-agentes/adjuntos/` para poder retomar la conversación.
+Los archivos pegados como URI local conservan su ruta original. El botón × quita el adjunto del borrador.
 
 Con el perfil de energía en «ahorro», WebKit dibuja a 30 cuadros por segundo y escribir se siente lento; la ventana lo ignora y dibuja a 60. Para respetar el ahorro: `LYRA_AHORRO=1 lyra-agentes`.

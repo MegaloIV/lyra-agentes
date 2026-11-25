@@ -25,6 +25,7 @@ import { anotarLimite, limites, listaLimites } from './limites.ts';
 import { diffGit, estadoGit, infoGithub, registroPrueba } from './git.ts';
 import { memorias } from './memorias.ts';
 import { Consolas } from './consolas.ts';
+import { guardarAdjunto, MAX_ADJUNTO } from './adjuntos.ts';
 // Si el servidor se lanzó desde una sesión de Claude Code, sus agentes heredarían estas variables y se
 // creerían sesiones hijas (no se guardan ni se pueden retomar).
 for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_AGENT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete process.env[k];
@@ -60,6 +61,18 @@ void catalogo().catch(() => {});   // se arma al arrancar para que el diálogo l
 const servidor = createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; frame-src blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+  if (req.method === 'POST' && (req.url || '').split('?')[0] === '/api/adjunto') {
+    if (!validarConexion(token, String(req.headers['x-lyra-token'] || ''), req.headers.origin, puerto, desarrollo)) {
+      res.writeHead(401); res.end(); return;
+    }
+    if (Number(req.headers['content-length']) > MAX_ADJUNTO) { res.writeHead(413); res.end('El archivo supera los 25 MB.'); return; }
+    try {
+      const url = new URL(req.url!, `http://127.0.0.1:${puerto}`);
+      const adjunto = await guardarAdjunto(req, url.searchParams.get('nombre') || 'archivo');
+      res.writeHead(201, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(adjunto));
+    } catch (e) { res.writeHead(400); res.end(e instanceof Error ? e.message : 'No se pudo adjuntar.'); }
+    return;
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
   // Videos y audio: GET /api/medio?ruta=…&cwd=…&t=TOKEN (el reproductor no manda cabeceras propias)
   if ((req.url || '').startsWith('/api/medio?')) {

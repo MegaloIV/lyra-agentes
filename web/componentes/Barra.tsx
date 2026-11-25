@@ -29,27 +29,45 @@ const ORDENES: { valor: Orden; nombre: string; titulo: string }[] = [
   { valor: 'semana', nombre: 'Semana', titulo: 'Agrupar por semana, de la más reciente' },
 ];
 
-/** Arrastrar una conversación a una carpeta */
-const ARRASTRE = 'application/x-lyra-sesion';
-/** Empieza a arrastrar una conversación. La imagen que se arrastra es una ficha chica con el título: la de WebKit
- *  (la fila entera, escalada) salía gigante */
-function arrastrar(e: DragEvent, sessionId: string, titulo: string) {
-  const dt = e.dataTransfer; if (!dt) return;
-  dt.setData(ARRASTRE, sessionId); dt.effectAllowed = 'move';
-  const ficha = document.createElement('div');
-  ficha.className = 'arrastre-ficha'; ficha.textContent = titulo;
-  document.body.appendChild(ficha);
-  dt.setDragImage(ficha, 14, 14);
-  setTimeout(() => ficha.remove(), 0);
-}
-function soltable(destino: string | null, marcado: string | null, setMarcado: (v: string | null) => void) {
-  const clave = destino ?? '';
-  return {
-    'data-soltar': marcado === clave ? 'true' : undefined,
-    onDragOver: (e: DragEvent) => { if (e.dataTransfer?.types.includes(ARRASTRE)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (marcado !== clave) setMarcado(clave); } },
-    onDragLeave: (e: DragEvent) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setMarcado(null); },
-    onDrop: (e: DragEvent) => { const s = e.dataTransfer?.getData(ARRASTRE); setMarcado(null); if (s) { e.preventDefault(); moverSesion(s, destino); } },
+/** Arrastrar una conversación a una carpeta. Es un arrastre propio (con el puntero) y no el de HTML: con la pantalla
+ *  escalada, WebKit dibujaba la imagen que se arrastra gigante. La ficha chica con el título sigue al puntero. */
+const marcador = { poner: (_v: string | null) => {} };
+function arrastrar(e: PointerEvent, sessionId: string, titulo: string) {
+  if (e.button !== 0 || (e.target as HTMLElement).closest('button, input, textarea, [contenteditable="true"]')) return;
+  const x0 = e.clientX, y0 = e.clientY;
+  let ficha: HTMLDivElement | undefined, destino: string | null | undefined;
+  const bajo = (ev: PointerEvent) => {
+    const el = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-destino]');
+    return el ? el.dataset.destino! : undefined;          // '' = el historial (fuera de toda carpeta)
   };
+  const mover = (ev: PointerEvent) => {
+    if (!ficha) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      ficha = document.createElement('div');
+      ficha.className = 'arrastre-ficha'; ficha.textContent = titulo;
+      document.body.appendChild(ficha); document.body.classList.add('arrastrando-sesion');
+      window.getSelection()?.removeAllRanges();
+    }
+    ficha.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 12}px)`;
+    const d = bajo(ev);
+    if (d !== destino) { destino = d; marcador.poner(d ?? null); }
+  };
+  const soltar = (ev: PointerEvent) => {
+    window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); window.removeEventListener('pointercancel', soltar);
+    if (!ficha) return;
+    ficha.remove(); document.body.classList.remove('arrastrando-sesion'); marcador.poner(null);
+    // El clic que sigue a soltar no debe abrir la conversación
+    const parar = (c: Event) => { c.stopPropagation(); c.preventDefault(); };
+    window.addEventListener('click', parar, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', parar, { capture: true }), 0);
+    const d = ev.type === 'pointerup' ? bajo(ev) : undefined;
+    if (d !== undefined) moverSesion(sessionId, d || null);
+  };
+  window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar); window.addEventListener('pointercancel', soltar);
+}
+function soltable(destino: string | null, marcado: string | null) {
+  const clave = destino ?? '';
+  return { 'data-destino': clave, 'data-soltar': marcado === clave ? 'true' : undefined };
 }
 
 /** Ícono de carpeta: abre una lista corta con las carpetas */
@@ -81,7 +99,7 @@ function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; on
   const objetivo: Objetivo = { proveedor: a.proveedor, titulo: a.titulo, agente: a.id, sessionId: a.sessionId, cwd: a.cwd, trabajando: a.estado === 'trabajando' };
   return (
     <li class="agente" data-estado={a.estado} data-proveedor={a.proveedor} aria-current={actual ? 'true' : undefined} onClick={onElegir}
-      draggable={!!a.sessionId} onDragStart={e => a.sessionId && arrastrar(e, a.sessionId, a.titulo)}
+      onPointerDown={e => a.sessionId && arrastrar(e, a.sessionId, a.titulo)}
       title={`${a.titulo}\n${nombreProveedor(a.proveedor)} · ${rutaCorta(a.cwd)}`}>
       <span class="agente-estado" />
       <div class="agente-texto">
@@ -103,7 +121,7 @@ function Fila({ s, onElegir, enProyecto = false }: { s: Sesion; onElegir: () => 
   const objetivo: Objetivo = { proveedor: s.proveedor, titulo: s.titulo, sessionId: s.sessionId, cwd: s.cwd };
   return (
     <li class="agente" data-estado="historial" data-proveedor={s.proveedor} aria-current={v?.tipo === 'sesion' && v.sessionId === s.sessionId ? 'true' : undefined}
-      draggable onDragStart={e => arrastrar(e, s.sessionId, s.titulo)}
+      onPointerDown={e => arrastrar(e, s.sessionId, s.titulo)}
       title={`${s.titulo}\n${nombreProveedor(s.proveedor)} · ${rutaCorta(s.cwd)}`} onClick={() => { elegir({ tipo: 'sesion', sessionId: s.sessionId, cwd: s.cwd, proveedor: s.proveedor }); onElegir(); }}>
       <span class="agente-estado" />
       <div class="agente-texto">
@@ -123,6 +141,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
   const [busqueda, setBusqueda] = useState('');
   const [plegado, setPlegado] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem(PLEGADO) || '{}'); } catch { return {}; } });
   const [marcado, setMarcado] = useState<string | null>(null);
+  marcador.poner = setMarcado;
   const [orden, setOrden] = useState<Orden>(() => { try { const o = localStorage.getItem(ORDEN); return ORDENES.some(x => x.valor === o) ? o as Orden : 'carpeta'; } catch { return 'carpeta'; } });
   const cambiarOrden = (o: Orden) => { setOrden(o); try { localStorage.setItem(ORDEN, o); } catch { /* sin almacenamiento */ } };
   const v = estado.vista;
@@ -193,7 +212,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
             if (q && !lista.length && !c.nombre.toLowerCase().includes(q)) return null;
             const abierta = c.abierta || !!q;
             return (
-              <div class="carpeta" key={c.id} data-abierta={String(abierta)} {...soltable(c.id, marcado, setMarcado)}>
+              <div class="carpeta" key={c.id} data-abierta={String(abierta)} {...soltable(c.id, marcado)}>
                 <div class="carpeta-cabecera" role="button" tabIndex={0} onClick={() => alternarCarpeta(c.id)} onKeyDown={e => e.key === 'Enter' && alternarCarpeta(c.id)}>
                   <span class="carpeta-flecha" />
                   <Icono nombre="carpeta" tam={14} />
@@ -209,7 +228,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
       )}
 
       {proyectos.length > 0 && (
-        <section class="grupo" data-grupo="historial" {...soltable(null, marcado, setMarcado)}>
+        <section class="grupo" data-grupo="historial" {...soltable(null, marcado)}>
           {proyectos.map(([cwd, lista], i) => {
             const ab = abierto(cwd, i);
             const titulo = titulos.get(cwd);

@@ -4,6 +4,14 @@ import { type Bloque } from '../servidor/protocolo.ts';
 import { bloquesDeItem, bloquesDeHilo, comandoLimpio, lineasDiff, tareasDePlan } from '../servidor/normalizarCodex.ts';
 import { errorLegible } from '../servidor/motor.ts';
 
+test('Codex: una sesión con otro escritor explica cómo retomarla sin perder el historial', () => {
+  const error = errorLegible('thread 01a213a0-c479-7b31-bff5-75e11f07f056 already has an active writer', 'Codex');
+  assert.match(error, /otra instancia de Codex/);
+  assert.match(error, /Cierra esa sesión/);
+  assert.match(error, /seguir leyendo el historial/);
+  assert.equal(errorLegible('Otro error', 'Codex'), 'Otro error');
+});
+
 test('Codex: el comando sale sin el envoltorio de bash', () => {
   assert.equal(comandoLimpio("/bin/bash -lc 'ls -la'"), 'ls -la');
   assert.equal(comandoLimpio('git status'), 'git status');

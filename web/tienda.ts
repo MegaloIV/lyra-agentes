@@ -82,6 +82,14 @@ function leerToken(): string {
   } catch { return t || ''; }
 }
 const token = leerToken();
+export async function subirAdjunto(archivo: File): Promise<{ ruta: string; nombre: string }> {
+  if (archivo.size > 25 * 1024 * 1024) throw new Error('El archivo supera los 25 MB.');
+  const r = await fetch(`/api/adjunto?nombre=${encodeURIComponent(archivo.name)}`, {
+    method: 'POST', headers: { 'X-Lyra-Token': token }, body: archivo,
+  });
+  if (!r.ok) throw new Error(await r.text() || 'No se pudo adjuntar el archivo.');
+  return r.json();
+}
 
 /** Lee un archivo para el visor (el servidor comprueba el token y la ruta) */
 export async function leerArchivo(ruta: string, cwd: string, como?: 'pdf'): Promise<{ tipo: string; datos: Blob; ruta: string; modificado?: number }> {

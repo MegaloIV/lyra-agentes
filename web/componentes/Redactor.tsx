@@ -2,12 +2,14 @@
 // Sin agente elegido es un agente nuevo: se crea al mandar el primer mensaje, con los ajustes que estén puestos.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { PermissionMode, Proveedor, ResumenAgente } from '@protocolo';
-import { estado, enviar, crearAgente, cambiarBorrador, explorar, type Vista } from '../tienda.ts';
+import { estado, enviar, crearAgente, cambiarBorrador, explorar, subirAdjunto, mostrarError, type Vista } from '../tienda.ts';
+import { etiquetaAdjunto, textoConAdjuntos, rutasPegadas, type Adjunto } from '../adjuntos.ts';
 import { Desplegable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { PROVEEDORES, cronometro, horaDe, info, miles, tokensCortos, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
 
 const borradores = new Map<string, string>();
+const archivosBorrador = new Map<string, Adjunto[]>();
 /** Con qué se retoma una conversación del historial (vacío: el modelo y el esfuerzo predeterminados) */
 type Reanudo = { modelo: string; esfuerzo: string; modo: PermissionMode };
 const SIN_CAMBIOS: Reanudo = { modelo: '', esfuerzo: '', modo: 'default' };
@@ -26,6 +28,31 @@ function Contador({ agente }: { agente: ResumenAgente }) {
   useEffect(() => { const r = setInterval(() => tic(x => x + 1), 1000); return () => clearInterval(r); }, []);
   const accion = agente.estado === 'esperando' ? 'Esperando tu respuesta' : `${FASES[p.fase] || 'Trabajando'}…`;
   return <span class="contador">{accion} <span class="contador-datos">{cronometro(Date.now() - p.inicio)}{p.tokens > 0 ? ` · ↓ ${tokensCortos(p.tokens)} tokens` : ''}</span></span>;
+}
+
+/** Los ajustes van siempre en una línea: si no caben, se compactan por pasos (data-compacto 1…4, ver estilo.css)
+ *  hasta que entren. Se mide de verdad, así un nombre de carpeta largo o el chip del contexto cuentan. */
+const PASOS = 4;
+function useCompactar(ref: { current: HTMLElement | null }) {
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    let ancho = -1;
+    // Se suman los anchos de los chips (no scrollWidth: el menú abierto de un chip también desborda y no cuenta)
+    const usado = () => { const h = [...el.children] as HTMLElement[]; const hueco = parseFloat(getComputedStyle(el).columnGap) || 0;
+      return h.reduce((t, c) => t + c.getBoundingClientRect().width, 0) + hueco * Math.max(0, h.length - 1); };
+    const ajustar = () => {
+      ancho = el.clientWidth;
+      let paso = 0;
+      el.dataset.compacto = '0';
+      while (usado() > el.clientWidth + 1 && paso < PASOS) el.dataset.compacto = String(++paso);
+    };
+    // En el cuadro siguiente: ajustar dentro del aviso del ResizeObserver lo hace avisar de nuevo (y WebKit lo da por error)
+    const tam = new ResizeObserver(() => requestAnimationFrame(() => { if (el.clientWidth !== ancho) ajustar(); }));
+    const cambios = new MutationObserver(ajustar);
+    tam.observe(el); cambios.observe(el, { childList: true, subtree: true, characterData: true });
+    ajustar();
+    return () => { tam.disconnect(); cambios.disconnect(); };
+  }, []);
 }
 
 /** Un chip que abre una lista corta hacia arriba */
@@ -155,19 +182,32 @@ function Ajustes({ agente, nuevo, sesion, reanudo, cambiarReanudo }: { agente?: 
 export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgente }) {
   const prefijo = useRef(0);
   const caja = useRef<HTMLTextAreaElement>(null);
-  const [texto, setTexto] = useState(() => borradores.get(clave(vista)) || '');
+  const selector = useRef<HTMLInputElement>(null);
+  const ajustes = useRef<HTMLDivElement>(null);
+  useCompactar(ajustes);
+  const componiendo = useRef(false);
+  const [texto, actualizarTexto] = useState(() => borradores.get(clave(vista)) || '');
+  const [adjuntos, setAdjuntos] = useState<Adjunto[]>(() => archivosBorrador.get(clave(vista)) || []);
+  const [subiendo, setSubiendo] = useState(0);
   const [elegido, setElegido] = useState(0);
   const [popupCerrado, setPopupCerrado] = useState(false);
   const [avisoEsc, setAvisoEsc] = useState(0);
   const [reanudo, setReanudo] = useState<Reanudo>(SIN_CAMBIOS);
   const cambiarReanudo = (c: Partial<Reanudo>) => setReanudo(r => ({ ...r, ...c }));
   const k = clave(vista);
+  const vistaActual = useRef(k);
+  vistaActual.current = k;
+  function setTexto(valor: string | ((anterior: string) => string)) {
+    actualizarTexto(prev => { const siguiente = typeof valor === 'function' ? valor(prev) : valor; borradores.set(k, siguiente); return siguiente; });
+  }
   const nuevo = vista === null;
 
-  useEffect(() => { prefijo.current = 0; setTexto(borradores.get(k) || ''); setElegido(0); setPopupCerrado(false); setReanudo(SIN_CAMBIOS); caja.current?.focus(); }, [k]);
-  useEffect(() => { borradores.set(k, texto); }, [texto, k]);
+  useLayoutEffect(() => { prefijo.current = 0; componiendo.current = false; actualizarTexto(borradores.get(k) || ''); setAdjuntos(archivosBorrador.get(k) || []); setElegido(0); setPopupCerrado(false); setReanudo(SIN_CAMBIOS); caja.current?.focus({ preventScroll: true }); }, [k]);
   useLayoutEffect(() => {
-    const t = caja.current; if (!t) return;
+    const t = caja.current; if (!t || componiendo.current) return;
+    // No controlar value en cada render: WebKit puede cancelar la tecla muerta o el IME
+    // cuando llega un bloque del agente mientras se está componiendo una vocal acentuada.
+    if (t.value !== texto) t.value = texto;
     t.style.height = 'auto';
     t.style.height = Math.min(t.scrollHeight, window.innerHeight * 0.4) + 'px';
   }, [texto]);
@@ -182,7 +222,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
     };
     window.addEventListener('lyra-insertar', insertar);
     return () => { window.removeEventListener('lyra-enfocar', enfocar); window.removeEventListener('lyra-insertar', insertar); };
-  }, []);
+  }, [k]);
   // El agente nuevo arranca en la carpeta del último usado si no hay una elegida
   if (nuevo && !estado.borrador.cwd) { const c = estado.agentes[0]?.cwd || estado.historial[0]?.cwd; if (c) estado.borrador.cwd = rutaCorta(c); }
 
@@ -206,8 +246,8 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
 
   /** `ya`: Ctrl+X Ctrl+S, como en la terminal: si el agente está trabajando, lo interrumpe y manda el mensaje enseguida */
   function mandar(ya = false) {
-    const t = texto.trim();
-    if (!t) return;
+    if (subiendo || componiendo.current || !texto.trim()) return;
+    const t = textoConAdjuntos(texto, adjuntos);
     if (nuevo) {
       if (falta) return;
       const modelo = modeloDe(b.proveedor, b.modelo || undefined).modelo;
@@ -223,6 +263,36 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
     else if (agente) enviar({ t: 'enviar', agente: agente.id, texto: t, ...(ya && trabajando ? { ya: true } : {}) });
     else return;
     setTexto(''); borradores.delete(k);
+    archivosBorrador.delete(k); setAdjuntos([]);
+  }
+
+  function agregarAdjunto(ruta: string, nombre: string, tipo: string, destino: string) {
+    const anteriores = archivosBorrador.get(destino) || [];
+    const etiqueta = etiquetaAdjunto(nombre, tipo, anteriores);
+    const lista = [...anteriores, { ruta, nombre, etiqueta }];
+    archivosBorrador.set(destino, lista);
+    const insertar = (prev: string) => `${prev}${prev && !/\s$/.test(prev) ? ' ' : ''}${etiqueta} `;
+    if (vistaActual.current === destino) { setAdjuntos(lista); setTexto(insertar); }
+    else borradores.set(destino, insertar(borradores.get(destino) || ''));
+  }
+  async function adjuntar(archivos: File[]) {
+    const destino = k;
+    setSubiendo(n => n + 1);
+    try {
+      for (const archivo of archivos) {
+        const a = await subirAdjunto(archivo);
+        agregarAdjunto(a.ruta, a.nombre, archivo.type, destino);
+      }
+    } catch (e) { mostrarError(e instanceof Error ? e.message : 'No se pudo adjuntar.'); }
+    finally { setSubiendo(n => n - 1); }
+  }
+  function recibirArchivos(datos: DataTransfer | null): boolean {
+    if (!datos) return false;
+    const archivos = [...datos.files];
+    if (archivos.length) { void adjuntar(archivos); return true; }
+    const rutas = rutasPegadas(datos.getData('text/uri-list') || datos.getData('x-special/gnome-copied-files'));
+    for (const ruta of rutas) agregarAdjunto(ruta, ruta.split('/').at(-1) || 'archivo', '', k);
+    return rutas.length > 0;
   }
 
   function completar(i: number) {
@@ -242,7 +312,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   }
 
   function tecla(e: KeyboardEvent) {
-    if (e.isComposing) return;
+    if (componiendo.current || e.isComposing || e.key === 'Dead' || e.keyCode === 229) return;
     const letra = e.key.toLowerCase();
     if (e.ctrlKey && !e.altKey && !e.metaKey && letra === 'x') {
       // Sin nada seleccionado no hay qué cortar: la ventana sonaba con cada Ctrl+X
@@ -306,18 +376,31 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
           ))}
         </div>
       )}
-      <div class="redactor-caja" data-nuevo={nuevo ? 'true' : undefined}>
+      <div class="redactor-caja" data-nuevo={nuevo ? 'true' : undefined}
+        onDragOver={e => { if ([...e.dataTransfer?.types || []].some(t => t === 'Files' || t === 'text/uri-list')) e.preventDefault(); }}
+        onDrop={e => { if (recibirArchivos(e.dataTransfer)) e.preventDefault(); }}>
         {/* Flota sobre la caja: que aparezca o cambie de largo no corre los ajustes ni los botones */}
         {!filtrados.length && <span class="redactor-estado">{!avisoEsc && trabajando && agente?.progreso && !agente.progreso.fin ? <Contador agente={agente} /> : textoEstado}</span>}
-        <textarea ref={caja} class="redactor-texto" rows={1} value={texto}
+        {!!adjuntos.length && <div class="redactor-adjuntos">{adjuntos.map(a => <span class="redactor-adjunto" key={a.etiqueta} title={a.ruta}>
+          <Icono nombre={a.etiqueta.startsWith('[imagen') ? 'imagen' : 'leer'} tam={13} />
+          <span class="redactor-adjunto-texto"><b>{a.etiqueta.slice(1, -1)}</b> {a.nombre}</span>
+          <button type="button" aria-label={`Quitar ${a.nombre}`} onClick={() => {
+            const lista = adjuntos.filter(x => x !== a); archivosBorrador.set(k, lista); setAdjuntos(lista); setTexto(t => t.replaceAll(a.etiqueta, '').replace(/ {2,}/g, ' '));
+          }}><Icono nombre="cerrar" tam={11} /></button></span>)}</div>}
+        <textarea ref={caja} class="redactor-texto" rows={1}
           placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : nuevo ? `¿Qué hacemos? (Enter envía · Shift+Enter, nueva línea)` : `Escribe a ${quien}…`}
-          onInput={e => { setTexto((e.currentTarget as HTMLTextAreaElement).value); setPopupCerrado(false); setElegido(0); }}
+          onInput={e => { e.currentTarget.dataset.escribiendo = String(Date.now()); setTexto(e.currentTarget.value); setPopupCerrado(false); setElegido(0); }}
+          onCompositionStart={() => { componiendo.current = true; }}
+          onCompositionEnd={e => { componiendo.current = false; setTexto(e.currentTarget.value); }}
+          onPaste={e => { if (recibirArchivos(e.clipboardData)) e.preventDefault(); }}
           onKeyDown={tecla} onBlur={() => { prefijo.current = 0; }} />
         <div class="redactor-barra">
-          <div class="ajustes"><Ajustes agente={agente} nuevo={nuevo} sesion={!agente && vista?.tipo === 'sesion' ? vista : undefined} reanudo={reanudo} cambiarReanudo={cambiarReanudo} /></div>
+          <input ref={selector} type="file" multiple hidden onChange={e => { void adjuntar([...e.currentTarget.files || []]); e.currentTarget.value = ''; }} />
+          <button type="button" class="redactor-adjuntar" aria-label="Adjuntar archivos" data-subiendo={subiendo ? 'true' : undefined} disabled={!!subiendo} onClick={() => selector.current?.click()}><Icono nombre="clip" tam={15} /></button>
+          <div class="ajustes" ref={ajustes}><Ajustes agente={agente} nuevo={nuevo} sesion={!agente && vista?.tipo === 'sesion' ? vista : undefined} reanudo={reanudo} cambiarReanudo={cambiarReanudo} /></div>
           {agente?.estado === 'error' && agente.sessionId && <button type="button" class="icono-boton" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd, proveedor: agente.proveedor })}><Icono nombre="recargar" /></button>}
           {trabajando && <button type="button" class="boton-detener" aria-label="Detener" onClick={() => agente && enviar({ t: 'interrumpir', agente: agente.id })}><Icono nombre="detener" /></button>}
-          <button type="button" class="boton-enviar" aria-label="Enviar" disabled={!texto.trim() || !!falta} onClick={() => mandar()}><Icono nombre="enviar" /></button>
+          <button type="button" class="boton-enviar" aria-label="Enviar" disabled={!texto.trim() || !!falta || !!subiendo} onClick={() => mandar()}><Icono nombre="enviar" /></button>
         </div>
       </div>
     </footer>

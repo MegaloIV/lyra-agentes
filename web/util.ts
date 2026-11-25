@@ -86,6 +86,8 @@ export const nombreEsfuerzo = (e?: string) => !e ? 'Esfuerzo normal' : ESFUERZOS
 /** El modelo que usa un agente, como lo llama su proveedor */
 export function modeloDe(proveedor: Proveedor | undefined, id?: string): { nombre: string; modelo?: Modelo } {
   const lista = info(proveedor)?.modelos || [];
+  // Sin elegir, Claude empieza con Opus (el servidor hace lo mismo: MODELO_NORMAL)
+  if (!id && (proveedor === 'claude' || !proveedor)) id = 'claude-opus-5-5';
   // Claude informa «claude-haiku-5-5» aunque se haya elegido el alias «haiku»: también vale el mismo nombre
   const modelo = lista.find(m => m.valor === (id ?? null)) || (id ? lista.find(m => m.valor && (id.startsWith(m.valor) || m.valor.startsWith(id)))
     || (proveedor === 'claude' || !proveedor ? lista.find(m => m.valor && m.nombre === nombreModelo(id)) : undefined) : undefined);

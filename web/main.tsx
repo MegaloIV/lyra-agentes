@@ -52,8 +52,11 @@ function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVis
   // Con contenido nuevo: seguirlo solo si el usuario estaba al final
   useLayoutEffect(() => {
     const d = ref.current; if (!d) return;
-    if (alFinal.current) d.scrollTo({ top: d.scrollHeight, behavior: 'instant' });
-    else setNuevo(true);
+    const entrada = document.activeElement as HTMLElement | null;
+    const escribiendo = entrada?.matches('.redactor-texto') && Date.now() - Number(entrada.dataset.escribiendo || 0) < 1500;
+    if (alFinal.current && !escribiendo) d.scrollTo({ top: d.scrollHeight, behavior: 'instant' });
+    else { alFinal.current = false; }
+    setNuevo(d.scrollHeight - d.scrollTop - d.clientHeight >= 60);
     onEntradas(entradas, activo.current);
     calcularActivo();
   }, [bloques]);
@@ -67,7 +70,7 @@ function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVis
   function alDesplazar() {
     const d = ref.current; if (!d) return;
     alFinal.current = d.scrollHeight - d.scrollTop - d.clientHeight < 60;
-    if (alFinal.current && nuevo) setNuevo(false);
+    setNuevo(!alFinal.current);
     if (!programado) { programado = true; requestAnimationFrame(() => { programado = false; calcularActivo(); }); }
   }
 
@@ -90,7 +93,7 @@ function Lector({ claveVista, bloques, cwd, quien, onEntradas, irA }: { claveVis
           {turnos.length > 0 && <Turnos turnos={turnos} hijos={hijos} cwd={cwd} quien={quien} />}
         </div>
       </div>
-      <button class="ir-abajo" hidden={!nuevo} onClick={() => { const d = ref.current; if (d) { alFinal.current = true; d.scrollTo({ top: d.scrollHeight, behavior: 'smooth' }); setNuevo(false); } }}>↓ Ir al final</button>
+      <div class="lector-navegacion"><button type="button" class="ir-abajo" hidden={!nuevo} onClick={() => { const d = ref.current; if (d) { alFinal.current = true; d.scrollTo({ top: d.scrollHeight, behavior: 'instant' }); setNuevo(false); } }}>↓ Ir al final</button></div>
     </>
   );
 }
@@ -177,7 +180,7 @@ function App() {
   // Atajos de teclado
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
-      if (document.querySelector('dialog[open]')) return;
+      if (e.isComposing || e.key === 'Dead' || e.keyCode === 229 || document.querySelector('dialog[open]')) return;
       const k = e.key.toLowerCase();
       // Dentro de una terminal las teclas son de la shell (Ctrl+R, Ctrl+K, Ctrl+T…), salvo la que alterna el panel
       if ((e.target as HTMLElement | null)?.closest?.('.consola') && !(e.ctrlKey && e.shiftKey && k === 't')) return;

@@ -16,6 +16,7 @@ const NOMBRES: Record<Proveedor, string> = { claude: 'Claude', codex: 'Codex', l
 
 export class GestorAgentes implements Contexto {
   agentes = new Map<string, Agente>();
+  private reanudando = new Map<string, Promise<Agente>>();
   emitir: (m: ServidorMensaje) => void;
   notificar: (id: string, titulo: string, texto: string) => void;
   mirando: (id: string) => boolean;
@@ -86,6 +87,18 @@ export class GestorAgentes implements Contexto {
   }
 
   async crear(opciones: { cwd: string; proveedor?: Proveedor; modelo?: string; esfuerzo?: string; modo?: PermissionMode; prompt?: string; reanudar?: string }) {
+    if (!opciones.reanudar) return this.crearAgente(opciones);
+    // Dos mensajes WebSocket pueden llegar mientras aún se está cargando el historial.
+    // Serializar por sesión permite que el segundo reutilice el agente del primero.
+    const clave = `${opciones.proveedor || 'claude'}:${opciones.reanudar}`;
+    const anterior = this.reanudando.get(clave);
+    const actual = (anterior ? anterior.catch(() => {}) : Promise.resolve()).then(() => this.crearAgente(opciones));
+    this.reanudando.set(clave, actual);
+    try { return await actual; }
+    finally { if (this.reanudando.get(clave) === actual) this.reanudando.delete(clave); }
+  }
+
+  private async crearAgente(opciones: { cwd: string; proveedor?: Proveedor; modelo?: string; esfuerzo?: string; modo?: PermissionMode; prompt?: string; reanudar?: string }) {
     const proveedor = opciones.proveedor || 'claude';
     let cwd = opciones.cwd;
     cwd = resolve(cwd.startsWith('~/') ? homedir() + cwd.slice(1) : cwd);

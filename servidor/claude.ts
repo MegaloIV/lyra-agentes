@@ -1,7 +1,5 @@
 // Claude Code por el Agent SDK.
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { query, listSessions, getSessionMessages, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Query, SDKUserMessage, CanUseTool, PermissionResult, EffortLevel } from '@anthropic-ai/claude-agent-sdk';
@@ -44,25 +42,27 @@ export async function modelosClaude(): Promise<Modelo[]> {
   const q = query({ prompt: vacia, options: { pathToClaudeCodeExecutable: EJECUTABLE, settingSources: ['user'], env: { ...process.env } } });
   try {
     const lista = await Promise.race([q.supportedModels(), new Promise<never>((_, mal) => setTimeout(() => mal(new Error('tiempo')), 20000))]);
-    for (const m of lista) if (m.resolvedModel) resueltos.set(m.value === 'default' ? null : m.value, m.resolvedModel);
-    return conEsfuerzoClaude(lista.map(m => ({ valor: m.value === 'default' ? null : m.value, nombre: m.value === 'default' ? 'Predeterminado' : m.displayName, descripcion: m.description, esfuerzos: m.supportsEffort ? m.supportedEffortLevels : undefined })));
+    for (const m of lista) if (!m.supportsEffort) { sinEsfuerzo.add(m.value); if (m.resolvedModel) sinEsfuerzo.add(m.resolvedModel); }
+    // Sin «Predeterminado»: en Lyra el de partida es siempre MODELO_NORMAL, que ya está en la lista
+    return conEsfuerzoClaude(lista.filter(m => m.value !== 'default').map(m => ({ valor: m.value, nombre: m.displayName, descripcion: m.description, esfuerzos: m.supportsEffort ? m.supportedEffortLevels : undefined })));
   } finally { vacia.cerrar(); q.close(); }
 }
 
-/** El id real detrás de cada alias («opus» → claude-opus-5-5), para buscar su ajuste */
-const resueltos = new Map<string | null, string>();
-/** El esfuerzo que usa Claude Code si Lyra no elige ninguno: el del modelo en ~/.claude/settings.json o, si no, el general.
- *  Se lee cada vez, así un cambio en el archivo se ve sin reiniciar. */
+/** Con qué empieza un agente de Claude si no se elige otra cosa (no se toma el de ~/.claude/settings.json, que es el de
+ *  la terminal): Opus y esfuerzo alto. «Normal» en el chip del esfuerzo es este. */
+export const MODELO_NORMAL = 'claude-opus-5-5';
+export const ESFUERZO_NORMAL = 'high';
+/** Los modelos que no aceptan esfuerzo (por alias y por id): a esos no se les manda */
+const sinEsfuerzo = new Set<string>();
+export function esfuerzoNormal(modelo = MODELO_NORMAL): EffortLevel | undefined {
+  return [...sinEsfuerzo].some(m => m === modelo || modelo.startsWith(m)) ? undefined : ESFUERZO_NORMAL;
+}
 export function conEsfuerzoClaude(lista: Modelo[]): Modelo[] {
-  let ajustes: { effortLevel?: unknown; modelSettings?: Record<string, { effortLevel?: unknown }> } = {};
-  try { ajustes = JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json'), 'utf8')); } catch { /* sin ajustes */ }
-  const texto = (v: unknown) => typeof v === 'string' && v ? v : undefined;
-  return lista.map(m => {
-    if (!m.esfuerzos) return m;
-    const id = resueltos.get(m.valor) ?? m.valor ?? undefined;
-    const defecto = texto(id && ajustes.modelSettings?.[id]?.effortLevel) ?? texto(ajustes.effortLevel);
-    return { ...m, esfuerzoDefecto: defecto && m.esfuerzos.includes(defecto) ? defecto : undefined };
-  });
+  // Si el alias «opus» ya es Opus 5.5 no se agrega otro igual (salía dos veces en el menú)
+  const modelos = lista.some(m => m.valor === MODELO_NORMAL || m.nombre === 'Opus 5.5') ? lista : [
+    { valor: MODELO_NORMAL, nombre: 'Opus 5.5', esfuerzos: ['low', 'medium', 'high', 'xhigh', 'max'] }, ...lista,
+  ];
+  return modelos.map(m => m.esfuerzos ? { ...m, esfuerzoDefecto: m.esfuerzos.includes(ESFUERZO_NORMAL) ? ESFUERZO_NORMAL : undefined } : m);
 }
 
 /** Los comandos de Claude Code sin un agente abierto (para escribir «/» en una conversación del historial); se piden una vez */
@@ -132,7 +132,8 @@ export class MotorClaude implements Motor {
     this.abortar = new AbortController(); this.cola = new Cola(); a.cerrado = false; this.tokens.reiniciar();
     this.ctx.estado(a, 'iniciando');
     if (this.local) { void this.iniciarLocal(); return; }
-    this.arrancar({ model: a.modelo, effort: a.esfuerzo as EffortLevel | undefined, settingSources: ['user', 'project', 'local'], env: { ...process.env } });
+    const modelo = a.modelo || MODELO_NORMAL;
+    this.arrancar({ model: modelo, effort: (a.esfuerzo as EffortLevel | undefined) ?? esfuerzoNormal(modelo), settingSources: ['user', 'project', 'local'], env: { ...process.env } });
   }
 
   /** Ollama tiene que estar corriendo y el modelo elegido (o el primero que sirva) */
@@ -223,9 +224,13 @@ export class MotorClaude implements Motor {
   async modelo(m?: string) {
     // En local, el modelo va en el entorno (también el de fondo): se cambia arrancando de nuevo sobre la misma sesión
     if (this.local) { if (m && m !== this.a.modelo) { this.a.modelo = m; if (this.a.estado !== 'trabajando') this.iniciar(); } return; }
-    await this.consulta?.setModel(m); this.a.modelo = m;
+    await this.consulta?.setModel(m || MODELO_NORMAL); this.a.modelo = m;
   }
-  async esfuerzo(e?: string) { if (this.local) return; await this.consulta?.applyFlagSettings({ effortLevel: (e ?? null) as EffortLevel | null }); this.a.esfuerzo = e; }
+  async esfuerzo(e?: string) {
+    if (this.local) return;
+    await this.consulta?.applyFlagSettings({ effortLevel: ((e as EffortLevel | undefined) ?? esfuerzoNormal(this.a.modelo) ?? null) });
+    this.a.esfuerzo = e;
+  }
   async comandos(): Promise<Comando[]> { return (await this.consulta?.supportedCommands() || []).map(c => ({ nombre: c.name, descripcion: c.description })); }
   cerrar() { this.fondo.parar(); this.cola.cerrar(); this.abortar.abort(); this.consulta?.close(); }
 }

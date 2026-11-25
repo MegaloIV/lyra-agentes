@@ -12,6 +12,11 @@ import subprocess
 import sys
 from urllib.parse import urlparse
 
+# GTK4/Wayland puede delegar las teclas muertas a un servicio de entrada que no
+# está activo en Hyprland. Simple compone ´ + a → á sin ese servicio.
+# Se respeta un método elegido explícitamente (IBus, Fcitx, etc.).
+os.environ.setdefault("GTK_IM_MODULE", "simple")
+
 # Con el perfil de energía en «ahorro», WebKit entra en su modo de bajo consumo y dibuja a 30 cuadros por segundo:
 # escribir en la caja se siente con retraso. El monitor «dbus» de GIO no lo detecta en este sistema (el del portal sí),
 # así que la ventana vuelve a 60. Va antes de cargar GTK y lo hereda el proceso web. LYRA_AHORRO=1 deja el de siempre.

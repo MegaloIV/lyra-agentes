@@ -7,6 +7,7 @@ import { bloqueUsuario, errorLegible, instalado, type Agente, type Contexto, typ
 
 type P = Record<string, unknown>;
 const legible = (t: string) => errorLegible(t, 'Codex');
+const ESFUERZO_NORMAL = 'high';
 
 /** Preguntar / Aceptar ediciones / Solo lectura / Sin preguntar → política de aprobación y sandbox de Codex */
 export const MODOS_CODEX: InfoProveedor['modos'] = [
@@ -84,8 +85,10 @@ export async function infoCodex(): Promise<InfoProveedor> {
     const modelos: Modelo[] = (Array.isArray(lista.data) ? lista.data.map(objeto) : []).filter(m => !m.hidden).map(m => ({
       valor: cadena(m.id), nombre: cadena(m.displayName) || cadena(m.id), descripcion: cadena(m.description) || undefined,
       esfuerzos: Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts.map(objeto).map(e => cadena(e.reasoningEffort)) : undefined,
-      esfuerzoDefecto: cadena(m.defaultReasoningEffort) || undefined }));
-    base.modelos = [{ valor: null, nombre: 'Predeterminado', descripcion: 'El de tu configuración de Codex' }, ...modelos];
+      esfuerzoDefecto: ESFUERZO_NORMAL }));
+    const predeterminado = (Array.isArray(lista.data) ? lista.data.map(objeto) : []).find(m => m.isDefault);
+    const modeloNormal = modelos.find(m => m.valor === predeterminado?.id);
+    base.modelos = [{ valor: null, nombre: 'Predeterminado', descripcion: 'El de tu configuración de Codex', esfuerzos: modeloNormal?.esfuerzos, esfuerzoDefecto: ESFUERZO_NORMAL }, ...modelos];
     leerCuota(await c.pedir<P>('account/rateLimits/read', {}).catch(() => ({})));
     base.cuota = cuota;
   } catch { /* sin conexión: se ofrece igual, el error saldrá al crear */ }
@@ -154,14 +157,15 @@ export class MotorCodex implements Motor {
   constructor(ctx: Contexto, a: Agente) {
     this.ctx = ctx; this.a = a;}
 
-  iniciar() { void this.arrancar(); }
+  private arrancando?: Promise<void>;
+  iniciar() { this.arrancando ??= this.arrancar().finally(() => { this.arrancando = undefined; }); }
 
   private async arrancar() {
     const a = this.a, ctx = this.ctx;
     ctx.estado(a, 'iniciando');
     try {
       const c = await conexion(), pol = politica(a.modo);
-      const comun = { cwd: a.cwd, model: a.modelo ?? null, approvalPolicy: pol.aprobacion, sandbox: pol.sandbox, config: a.esfuerzo ? { model_reasoning_effort: a.esfuerzo } : null };
+      const comun = { cwd: a.cwd, model: a.modelo ?? null, approvalPolicy: pol.aprobacion, sandbox: pol.sandbox, config: { model_reasoning_effort: a.esfuerzo || ESFUERZO_NORMAL } };
       const r = a.sessionId ? await c.pedir<P>('thread/resume', { threadId: a.sessionId, ...comun, excludeTurns: true }) : await c.pedir<P>('thread/start', comun);
       const hilo = objeto(r.thread);
       this.hilo = cadena(hilo.id); a.sessionId = this.hilo; hilos.set(this.hilo, this);
@@ -193,7 +197,7 @@ export class MotorCodex implements Motor {
     const params: P = { threadId: this.hilo, clientUserMessageId: id, input: [{ type: 'text', text: texto, text_elements: [] }] };
     if (this.cambios.modo) { params.approvalPolicy = pol.aprobacion; params.sandboxPolicy = pol.politica; }
     if (this.cambios.modelo) params.model = a.modelo ?? null;
-    if (this.cambios.esfuerzo) params.effort = a.esfuerzo ?? null;
+    if (this.cambios.esfuerzo) params.effort = a.esfuerzo || ESFUERZO_NORMAL;
     conexion().then(c => c.pedir<P>('turn/start', params)).then(r => {
       this.cambios = { modo: false, modelo: false, esfuerzo: false };
       const t = objeto(r.turn); if (this.turno === 'pendiente') this.turno = cadena(t.id);

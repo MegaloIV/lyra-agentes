@@ -30,7 +30,7 @@ export const MEDIOS: Record<string, string> = {
 /** Lo que se pasa a PDF para verlo (los .docx se dibujan en la página, sin convertir) */
 export const OFICINA = /\.(pptx?|xlsx?|docx?|odt|odp|ods|rtf)$/i;
 /** Carpetas ocultas que sí se pueden mostrar: imágenes de Codex y planes de Claude */
-const PERMITIDAS = ['.codex/generated_images', '.claude/plans'];
+const PERMITIDAS = ['.codex/generated_images', '.claude/plans', '.local/state/lyra-agentes/adjuntos'];
 
 export type Archivo = { ruta: string; tipo: string; tamano: number; datos: Buffer; modificado?: number };
 
