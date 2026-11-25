@@ -194,12 +194,26 @@ export class MotorCodex implements Motor {
     switch (metodo) {
       case 'turn/started': this.turno = cadena(objeto(p.turn).id); break;
       case 'item/started': case 'item/completed': {
-        const item = objeto(p.item), id = cadena(item.id);
+        const recibido = objeto(p.item), id = cadena(recibido.id);
+        const anterior = this.items.get(id);
+        const item = { ...anterior, ...recibido };
+        if (item.type === 'commandExecution') {
+          item.inicio = anterior?.inicio || Date.now();
+          if (metodo === 'item/completed' && typeof item.durationMs !== 'number') item.durationMs = Date.now() - Number(item.inicio);
+        }
         if (item.type === 'userMessage') return;   // ya está: lo puso enviar()
         if (item.type === 'fileChange' || item.type === 'commandExecution') this.items.set(id, item);
         const bloques = bloquesDeItem(item, a.cwd).map(b => b.tipo === 'texto' ? { ...b, enCurso: metodo === 'item/started' } : b);
         ctx.ops(a, bloques.map(b => a.bloques.some(x => x.id === b.id) ? { op: 'actualizar' as const, id: b.id, cambios: (({ id: _i, tipo: _t, ...resto }) => resto)(b as Bloque & P) } : { op: 'agregar' as const, bloque: b }));
         if (metodo === 'item/completed') this.items.delete(id);
+        break;
+      }
+      case 'item/commandExecution/outputDelta': {
+        const id = cadena(p.itemId), item = this.items.get(id);
+        if (!item) break;
+        item.aggregatedOutput = cadena(item.aggregatedOutput) + cadena(p.delta);
+        const b = bloquesDeItem(item, a.cwd)[0];
+        if (b?.tipo === 'herramienta') ctx.ops(a, [{ op: 'actualizar', id, cambios: { terminal: b.terminal } }]);
         break;
       }
       case 'item/agentMessage/delta': {

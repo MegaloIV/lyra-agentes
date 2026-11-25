@@ -1,13 +1,13 @@
 # Lyra · Agentes
 
-Una ventana para trabajar con varios agentes de programación a la vez —**Claude Code**, **Codex**, **Gemini CLI** y un **modelo local** con Ollama— y leer cada conversación como un documento ordenado, en vez de una terminal que se desplaza sin fin.
+Una ventana para trabajar con varios agentes de programación a la vez —**Claude Code**, **Codex** y un **modelo local** con Ollama— y leer cada conversación como un documento ordenado, en vez de una terminal que se desplaza sin fin.
 
 - **Conversaciones como documento:** el texto del agente en Markdown, las acciones (leer, editar, ejecutar) plegadas con su diff o su salida, y un índice para saltar entre tus mensajes.
 - **Varios agentes al mismo tiempo:** la barra de la izquierda muestra quién te necesita, quién trabaja y quién terminó. El historial de los cuatro proveedores se agrupa por la carpeta de cada proyecto (cada una en un cuadro gris con borde blanco), por día o por semana, y se carga completo (no solo las más recientes). Además puedes crear tus propias carpetas. El botón «Abrir en otro escritorio» de cada proyecto abre su carpeta en el gestor de archivos, en un escritorio vacío (en Hyprland; en otros escritorios, solo la abre).
 - **Sin diálogos:** el agente nuevo empieza al escribir. El proveedor, el modelo, el esfuerzo, los permisos y la carpeta son chips en la misma caja de texto, y se pueden cambiar en cualquier momento (Shift+Tab cambia los permisos, como en la terminal). El chip de la carpeta tiene sus carpetas recientes y un explorador para subir y bajar de nivel en el mismo menú, sin abrir otra ventana.
 - **Límites de uso a la vista:** abajo en la barra, cuánto usaste de Claude y de Codex (la ventana de 5 horas y la semanal), con la hora en que se renueva cada una. Se actualiza solo y al tocar «Uso».
 - **Permisos y preguntas en línea:** aprobar, rechazar con un motivo o responder sin salir del documento.
-- **Memorias al costado:** lo que recuerda o lee siempre cada agente (Claude, Codex, Gemini y el local) para la carpeta de la conversación, lo general y, en Claude, la memoria de los otros proyectos. Tocar un archivo lo abre en el visor.
+- **Memorias al costado:** lo que recuerda o lee siempre cada agente (Claude, Codex y el local) para la carpeta de la conversación, lo general y, en Claude, la memoria de los otros proyectos. Tocar un archivo lo abre en el visor.
 - **GitHub al costado:** la rama de la carpeta del agente, los cambios sin commit (con su diff), los commits recientes, el PR de la rama con sus pruebas (CI) y los issues abiertos. Si una prueba falla, «Pasarle el error» pone su registro en la caja; cada issue tiene un botón para que lo resuelva el agente. Los botones solo escriben el encargo en la caja: tú decides si lo mandas.
 - **Visor al costado:** muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas de cálculo, sin abrir otra app. «Abrir con…» ofrece las apps de tu escritorio que abren ese archivo, y la papelera (dos clics) lo manda a la papelera del escritorio, de donde se recupera.
 - **Ventana propia:** GTK4 + WebKitGTK (unos 300 MB), no un navegador. También se puede usar desde un navegador.
@@ -22,7 +22,6 @@ Todo corre en tu computadora: un servidor local (127.0.0.1) maneja a los agentes
 - Al menos uno de estos, con tu sesión iniciada:
   - **Claude Code** (`claude`): viene con el Agent SDK de Anthropic.
   - **Codex** (`codex`): se usa con `codex app-server`.
-  - **Gemini CLI** (`gemini`): se usa con `gemini --acp`. Google ya no deja entrar con una cuenta personal: necesita una clave de API de Google AI Studio (gratis). «Poner la clave», en Lyra, abre una terminal para pegarla; queda en `~/.gemini/.env`.
   - **Ollama** con un modelo que sepa usar herramientas (ver más abajo).
 - Opcional: **GitHub CLI** (`gh`) con `gh auth login`, para ver PRs, pruebas e issues en la pestaña GitHub. Sin él se ve todo lo de git.
 - Opcional: **LibreOffice**, para ver presentaciones, hojas de cálculo y documentos `.doc` en el visor. Los `.docx` y los PDF se ven sin él.
@@ -49,9 +48,9 @@ lyra-agentes --log       # muestra el registro del servidor
 lyra-agentes --instalar  # la agrega al menú de aplicaciones
 ```
 
-**Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. Con clave de API, Google muestra el uso de Gemini solo en AI Studio, así que su fila solo dice si tiene clave. El agente local no tiene límites.
+**Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. El agente local no tiene límites.
 
-Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub, Ctrl+M memorias y Shift+Tab siguiente modo de permisos.
+Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub, Ctrl+M memorias, Ctrl+T terminales y Shift+Tab siguiente modo de permisos.
 
 ## Agente local (Ollama)
 
@@ -89,14 +88,14 @@ hl.window_rule({ name = "lyra_agentes", match = { class = "^(io\\.lyra\\.Agentes
 
 Las opacidades se cambian con las variables CSS `--opacidad-barra` y `--opacidad-lectura` en `web/estilo.css`.
 
-El estado se guarda en `~/.local/state/lyra-agentes/`: el token, las carpetas propias y el registro de las sesiones locales. Las conversaciones quedan donde las guarda cada CLI (`~/.claude`, `~/.codex`, `~/.gemini`).
+El estado se guarda en `~/.local/state/lyra-agentes/`: el token, las carpetas propias y el registro de las sesiones locales. Las conversaciones quedan donde las guarda cada CLI (`~/.claude`, `~/.codex`).
 
 ## Seguridad
 
 - El servidor escucha solo en 127.0.0.1 y exige un token aleatorio, guardado con permisos 600, en cada conexión. Además comprueba el origen.
 - La pestaña GitHub solo lee: git sin fsmonitor, diff externo ni textconv (un repo ajeno no puede hacer que ejecute programas suyos) y `gh` con la sesión que ya tienes; la app no guarda tokens. Solo lee repos de tu carpeta personal, `/tmp` y `/mnt/shared`.
 - El visor solo muestra archivos de tu carpeta personal, `/tmp` y `/mnt/shared`, nunca de carpetas ocultas como `~/.ssh`. Resuelve los enlaces simbólicos antes de comprobar la ruta. El HTML se muestra sin scripts. Borrar desde el visor sigue las mismas reglas y nunca es definitivo: solo mueve a la papelera (en `/tmp`, que no tiene, no borra). El explorador de carpetas solo lista nombres de carpetas, sin las ocultas.
-- Borrar una conversación no es definitivo: las de Claude, Gemini y las locales van a la papelera del escritorio, y las de Codex se archivan.
+- Borrar una conversación no es definitivo: las de Claude y las locales van a la papelera del escritorio, y las de Codex se archivan.
 
 ## Desarrollo
 
@@ -107,6 +106,8 @@ npm test            # pruebas (node --test)
 npm run typecheck
 ```
 
-- `servidor/` tiene un archivo por proveedor (`claude.ts`, `codex.ts`, `gemini.ts`, `local.ts`), que implementan la interfaz común de `motor.ts`. `normalizar*.ts` convierte los mensajes de cada uno en bloques del documento.
+- `servidor/` tiene un archivo por proveedor (`claude.ts`, `codex.ts`, `local.ts`), que implementan la interfaz común de `motor.ts`. `normalizar*.ts` convierte los mensajes de cada uno en bloques del documento.
 - `web/` es la interfaz, hecha con Preact.
 - `ventana/ventana.py` es la ventana GTK.
+
+En la caja: Ctrl+C sin selección detiene el agente; Ctrl+X seguido de Ctrl+S en 1,5 segundos envía. Con selección se conservan copiar y cortar. Ctrl+S solo no guarda la página.

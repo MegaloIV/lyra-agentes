@@ -7,9 +7,9 @@ import { aplicarOps } from '@protocolo';
 export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string; proveedor?: Proveedor } | null;
 /** Con qué se crea el próximo agente; se recuerda entre sesiones */
 export type Borrador = { proveedor: Proveedor; modelo: string; esfuerzo: string; modo: PermissionMode; cwd: string };
-export type Panel = 'indice' | 'visor' | 'github' | 'memorias' | null;
+export type Panel = 'indice' | 'visor' | 'github' | 'memorias' | 'terminales' | null;
 
-function leerLocal<T>(clave: string, defecto: T): T { try { const v = localStorage.getItem(clave); return v ? { ...defecto, ...JSON.parse(v) } as T : defecto; } catch { return defecto; } }
+function leerLocal<T>(clave: string, defecto: T): T { try { const v = localStorage.getItem(clave); const datos = v ? JSON.parse(v) : {}; if (datos.proveedor && !['claude', 'codex', 'local'].includes(datos.proveedor)) return defecto; return { ...defecto, ...datos } as T; } catch { return defecto; } }
 export function guardarLocal(clave: string, valor: unknown) { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch {} }
 export type Documento = { bloques: Bloque[]; soloLectura: boolean };
 
@@ -97,7 +97,7 @@ export function mostrarError(texto: string, nivel: 'error' | 'info' = 'error') {
 /** Una conversación: abierta (`agente`) o del historial (`sessionId`) */
 export type Objetivo = { proveedor: Proveedor; titulo: string; agente?: string; sessionId?: string; cwd?: string; trabajando?: boolean };
 
-/** Claude y Gemini van a la papelera del escritorio; Codex se archiva. Nunca es definitivo. */
+/** Claude y el local van a la papelera del escritorio; Codex se archiva. Nunca es definitivo. */
 export function borrar(o: Objetivo) { enviar({ t: 'borrar', proveedor: o.proveedor, sessionId: o.sessionId, agente: o.agente }); }
 /** Borra todas las conversaciones de una carpeta del historial (van a la papelera o se archivan) */
 export function borrarVarias(sesiones: { proveedor: Proveedor; sessionId: string }[]) {
@@ -243,7 +243,7 @@ function recibir(m: ServidorMensaje) {
       if (v?.tipo === 'agente' && v.id === m.agente && document.visibilityState === 'visible' && m.ops.some(o => o.op === 'agregar' && o.bloque.tipo === 'fin')) enviar({ t: 'leer', agente: m.agente });
       break;
     }
-    case 'historial': estado.historial = m.sesiones; break;
+    case 'historial': estado.historial = m.sesiones.filter(s => ['claude', 'codex', 'local'].includes(s.proveedor)); break;
     case 'catalogo': estado.catalogo = m.proveedores; break;
     case 'limites': estado.limites = { limites: m.limites, fecha: m.fecha }; estado.pidiendoLimites = 0; break;
     case 'comandos': estado.comandos.set(m.agente, m.comandos); break;

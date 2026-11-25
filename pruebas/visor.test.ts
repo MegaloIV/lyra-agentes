@@ -49,9 +49,9 @@ test('la papelera del visor solo acepta lo que el visor puede mostrar', async ()
 test('el visor abre memorias de los agentes y nada más de sus carpetas ocultas', async () => {
   const { esMemoriaLegible } = await import('../servidor/memorias.ts');
   for (const r of ['.claude/projects/-home-x/memory/MEMORY.md', '.claude/CLAUDE.md', '.claude/rules/estilo.md', '.codex/AGENTS.md',
-    '.codex/memories/MEMORY.md', '.codex/memories/rollout_summaries/a.md', '.gemini/GEMINI.md', 'Proyectos/app/.claude/CLAUDE.md'])
+    '.codex/memories/MEMORY.md', '.codex/memories/rollout_summaries/a.md', 'Proyectos/app/.claude/CLAUDE.md'])
     assert.equal(esMemoriaLegible(r), true, r);
   for (const r of ['.claude/settings.json', '.claude/.credentials.json', '.claude/projects/-home-x/abc.jsonl', '.claude/projects/-home-x/memory/x.json',
-    '.codex/auth.json', '.codex/config.toml', '.codex/memories/../auth.md', '.codex/memories/.oculto/a.md', '.gemini/.env', '.gemini/oauth_creds.json', '.gemini/settings.json'])
+    '.codex/auth.json', '.codex/config.toml', '.codex/memories/../auth.md', '.codex/memories/.oculto/a.md'])
     assert.equal(esMemoriaLegible(r), false, r);
 });

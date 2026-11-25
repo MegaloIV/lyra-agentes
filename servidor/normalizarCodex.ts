@@ -64,7 +64,7 @@ export function bloquesDeItem(item: Item, cwd: string): Bloque[] {
       const salida = cadena(item.aggregatedOutput), codigo = typeof item.exitCode === 'number' ? item.exitCode : null;
       const { resumen, icono } = resumenComando(comando, acciones, cwd);
       const texto = comando + (salida ? '\n\n' + salida.replace(/\n$/, '') : '') + (codigo ? `\n\n(terminó con código ${codigo})` : '') + (item.status === 'declined' ? '\n\n(rechazado)' : '');
-      return [herramienta(id, 'Bash', resumen, icono, estadoDe(item.status, !codigo), { command: comando }, { clase: 'codigo', lenguaje: 'bash', texto: recortar(texto) })];
+      return [{ ...herramienta(id, 'Bash', resumen, icono, estadoDe(item.status, !codigo), { command: comando }, { clase: 'codigo', lenguaje: 'bash', texto: recortar(texto) }), terminal: { comando, descripcion: cadena(item.description) || undefined, carpeta: cadena(item.cwd) || cwd, salida, codigo: codigo ?? undefined, inicio: typeof item.inicio === 'number' ? item.inicio : undefined, duracionMs: typeof item.durationMs === 'number' ? item.durationMs : undefined } }];
     }
     case 'fileChange': {
       const cambios = Array.isArray(item.changes) ? item.changes.map(objeto) : [];

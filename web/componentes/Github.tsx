@@ -31,10 +31,10 @@ function Prueba({ p, cwd }: { p: PruebaGit; cwd: string }) {
   const pidiendo = estado.pidiendoRegistro === `${p.run}:${p.job}`;
   return (
     <li class="git-prueba" data-estado={p.estado}>
-      <span class="git-prueba-icono" title={NOMBRE_PRUEBA[p.estado]}><Icono nombre={ICONO_PRUEBA[p.estado]} tam={14} /></span>
+      <span class="git-prueba-icono" aria-label={NOMBRE_PRUEBA[p.estado]}><Icono nombre={ICONO_PRUEBA[p.estado]} tam={14} /></span>
       {p.url ? <Enlace url={p.url} clase="git-prueba-nombre">{p.nombre}</Enlace> : <span class="git-prueba-nombre">{p.nombre}</span>}
       {p.estado === 'error' && p.run && (
-        <button type="button" class="git-accion" disabled={pidiendo} title="Pone el registro del error en la caja para que el agente lo arregle"
+        <button type="button" class="git-accion" disabled={pidiendo}
           onClick={() => { estado.pidiendoRegistro = `${p.run}:${p.job}`; avisar(); enviar({ t: 'registroPrueba', cwd, run: p.run!, job: p.job }); }}>
           {pidiendo ? 'Trayendo…' : 'Pasarle el error'}
         </button>
@@ -210,7 +210,7 @@ export function Github({ cwd, turnos }: { cwd: string; turnos: number }) {
                     <span class="git-numero">#{i.numero}</span>
                     <span class="git-fila-texto"><span>{i.titulo}</span>{(i.etiquetas.length > 0 || i.autor) && <small>{[i.autor, ...i.etiquetas].filter(Boolean).join(' · ')}</small>}</span>
                   </Enlace>
-                  <button type="button" class="agente-accion git-resolver" title="Que lo resuelva el agente (lo pone en la caja)" aria-label="Que lo resuelva el agente"
+                  <button type="button" class="agente-accion git-resolver" aria-label="Que lo resuelva el agente"
                     onClick={() => insertarEnCaja(`Resuelve el issue #${i.numero} de ${gh.repo}: «${i.titulo}» (${i.url}).\n\n${i.cuerpo.trim() || '(sin descripción)'}\n\nCuando termines, dime qué cambiaste y cómo lo probaste.`)}>
                     <Icono nombre="agente" />
                   </button>

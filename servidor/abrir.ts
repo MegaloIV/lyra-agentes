@@ -3,7 +3,6 @@ import { execFile, spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { instalado } from './motor.ts';
 
 /** El entorno de una app abierta desde el escritorio: el shell de inicio del usuario y nada de la terminal
@@ -69,16 +68,13 @@ async function carpetaAparte(cwd: string) {
   }
 }
 
-export async function abrirCon(con: 'terminal' | 'carpeta' | 'carpetaAparte' | 'loginGemini', ruta?: string) {
+export async function abrirCon(con: 'terminal' | 'carpeta' | 'carpetaAparte', ruta?: string) {
   const cwd = ruta ? resolve(ruta.startsWith('~/') ? homedir() + ruta.slice(1) : ruta) : homedir();
   if (!(await stat(cwd).catch(() => null))?.isDirectory()) throw new Error('Esa carpeta ya no existe.');
   switch (con) {
     case 'terminal': return abrirTerminal(cwd);
     case 'carpeta': return lanzar('xdg-open', [cwd], cwd);
     case 'carpetaAparte': void carpetaAparte(cwd).catch(() => {}); return;
-    case 'loginGemini':
-      // Ya no se puede con la cuenta de Google: una terminal guía para pegar la clave de AI Studio (la pega el usuario)
-      return abrirTerminal(homedir(), [fileURLToPath(new URL('../bin/gemini-clave', import.meta.url))]);
   }
 }
 

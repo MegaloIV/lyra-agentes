@@ -21,7 +21,7 @@ export function TituloEditable({ clave, titulo, clase, onGuardar }: { clave: str
 /** Botón cuadrado con un ícono; el texto va en el globito al pasar el cursor */
 export function BotonIcono({ icono, titulo, onClick, activo, clase = '', ...resto }: { icono: string; titulo: string; onClick: (e: MouseEvent) => void; activo?: boolean; clase?: string; [k: string]: unknown }) {
   return (
-    <button type="button" class={`icono-boton ${clase}`} title={titulo} aria-label={titulo} aria-pressed={activo === undefined ? undefined : activo} onClick={onClick} {...resto}>
+    <button type="button" class={`icono-boton ${clase}`} aria-label={titulo} aria-pressed={activo === undefined ? undefined : activo} onClick={onClick} {...resto}>
       <Icono nombre={icono} />
     </button>
   );
@@ -33,7 +33,7 @@ export function Papelera({ titulo = 'Borrar', onBorrar, clase = 'agente-accion' 
   useEffect(() => { if (!armada) return; const t = setTimeout(() => setArmada(false), 3000); return () => clearTimeout(t); }, [armada]);
   return (
     <button type="button" class={clase} data-accion="borrar" data-armada={armada ? 'true' : undefined}
-      title={armada ? 'Clic otra vez para borrar' : titulo} aria-label={armada ? 'Confirmar: borrar' : titulo}
+      aria-label={armada ? 'Confirmar: borrar' : titulo}
       onClick={e => { e.stopPropagation(); if (armada) { setArmada(false); onBorrar(); } else setArmada(true); }}
       onMouseLeave={() => armada && setTimeout(() => setArmada(false), 1200)}>
       <Icono nombre="papelera" />{armada && <span class="papelera-texto">¿Borrar?</span>}

@@ -1,15 +1,13 @@
 // Límites de uso de todos los proveedores juntos, para la barra: Claude (las ventanas del plan de claude.ai, las
-// mismas de /usage) y Codex (las de la cuenta de ChatGPT). Gemini, con clave de API, no tiene dónde consultar la cuota
-// (Google solo la muestra en AI Studio) y el local no tiene.
+// mismas de /usage) y Codex (las de la cuenta de ChatGPT). El local no tiene límites.
 // Se guardan un rato para no preguntar a cada rato: pedir los de Claude sin un agente abierto arranca Claude Code.
 import type { Limite, Proveedor } from './protocolo.ts';
 import { limitesClaude } from './claude.ts';
 import { limitesCodex } from './codex.ts';
-import { geminiConSesion } from './gemini.ts';
 import { instalado } from './motor.ts';
 
 const VIGENCIA = 2 * 60_000;
-const ORDEN: Proveedor[] = ['claude', 'codex', 'gemini'];
+const ORDEN: Proveedor[] = ['claude', 'codex'];
 const actuales = new Map<Proveedor, { limite: Limite; fecha: number }>();
 let armando: Promise<void> | undefined;
 
@@ -34,8 +32,6 @@ export async function limites(fresco = false) {
         viejo('claude') && (instalado('claude') ? limitesClaude().catch(e => fallo('claude', e)).then(anotarLimite) : undefined),
         viejo('codex') && limitesCodex().then(l => l ? anotarLimite(l) : actuales.delete('codex'), e => anotarLimite(fallo('codex', e))),
       ]);
-      if (instalado('gemini')) anotarLimite({ proveedor: 'gemini', ventanas: [], nota: geminiConSesion() ? 'cuota en AI Studio' : 'sin clave' });
-      else actuales.delete('gemini');
     })().finally(() => { armando = undefined; });
     await armando;
   }

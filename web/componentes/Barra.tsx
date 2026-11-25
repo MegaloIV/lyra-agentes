@@ -58,7 +58,7 @@ function Mover({ sessionId }: { sessionId: string }) {
   const actual = estado.grupos.sesiones[sessionId];
   return (
     <span class="ancla">
-      <button type="button" class="agente-accion" data-accion="mover" title={actual ? 'Mover a otra carpeta' : 'Guardar en una carpeta'} aria-label="Mover a una carpeta"
+      <button type="button" class="agente-accion" data-accion="mover" aria-label="Mover a una carpeta"
         onClick={e => { e.stopPropagation(); setAbierto(x => !x); }}><Icono nombre="carpeta" /></button>
       {abierto && (
         <Desplegable onCerrar={() => setAbierto(false)}>
@@ -88,11 +88,11 @@ function Agente({ a, actual, onElegir }: { a: ResumenAgente; actual: boolean; on
         <TituloEditable clave={`agente:${a.id}`} titulo={a.titulo} clase="agente-titulo" onGuardar={t => renombrar(objetivo, t)} />
         <span class="agente-meta"><span class="proveedor-marca" data-proveedor={a.proveedor}>{nombreProveedor(a.proveedor)}</span> {nombreCarpeta(a.cwd)} · {a.estado === 'esperando' ? 'espera tu respuesta' : a.estado === 'error' ? 'se detuvo' : haceCuanto(a.ultimaActividad)}</span>
       </div>
-      {a.sinLeer && !actual && <span class="agente-sinleer" title="Terminó y no lo has visto" />}
+      {a.sinLeer && !actual && <span class="agente-sinleer" />}
       <span class="agente-acciones">
         {a.sessionId && <Mover sessionId={a.sessionId} />}
         <Papelera titulo="Borrar la conversación" onBorrar={() => borrar(objetivo)} />
-        <button type="button" class="agente-accion" title="Cerrar (queda guardada)" aria-label="Cerrar" onClick={e => { e.stopPropagation(); enviar({ t: 'cerrar', agente: a.id }); }}><Icono nombre="cerrar" /></button>
+        <button type="button" class="agente-accion" aria-label="Cerrar" onClick={e => { e.stopPropagation(); enviar({ t: 'cerrar', agente: a.id }); }}><Icono nombre="cerrar" /></button>
       </span>
     </li>
   );
@@ -146,7 +146,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
     }
   }
   const hay = new Set(estado.historial.map(s => s.proveedor));
-  // Siempre un punto por proveedor (Claude, Codex, Gemini y el local), aunque todavía no tenga conversaciones
+  // Siempre un punto por proveedor (Claude, Codex y el local), aunque todavía no tenga conversaciones
   const filtrables = PROVEEDORES;
   const proyectos = [...porProyecto.entries()];
   const abierto = (cwd: string, i: number) => !!q || (plegado[cwd] ?? i < ABIERTAS_DE_ENTRADA);
@@ -155,7 +155,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
 
   return (
     <aside class="agentes" data-abierto={String(abierta)}>
-      <div class="barra-borde" onPointerDown={onBorde} onDblClick={onBordeDoble} title="Arrastra para cambiar el ancho (doble clic: el de siempre)" />
+      <div class="barra-borde" onPointerDown={onBorde} onDblClick={onBordeDoble} />
       <header class="agentes-cabecera">
         <span class="marca">Lyra</span>
         <BotonIcono icono="tamanos" titulo="Volver a los tamaños de siempre (barra izquierda y paneles de la derecha)" onClick={onTamanos} />
@@ -166,12 +166,12 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
       <div class="buscador">
         <input type="search" class="buscador-campo" placeholder="Buscar…" value={busqueda} onInput={e => setBusqueda((e.currentTarget as HTMLInputElement).value)} />
         {filtrables.length > 1 && filtrables.map(p => (
-          <button type="button" key={p.id} class="buscador-proveedor" data-proveedor={p.id} aria-pressed={filtro === p.id} title={`Solo ${p.nombre}${hay.has(p.id) ? '' : ' (todavía sin conversaciones)'}`} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}><span class="proveedor-punto" /></button>
+          <button type="button" key={p.id} class="buscador-proveedor" data-proveedor={p.id} aria-pressed={filtro === p.id} aria-label={`Solo ${p.nombre}`} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}><span class="proveedor-punto" /></button>
         ))}
       </div>
       {estado.historial.length > 0 && (
         <div class="orden" role="group" aria-label="Agrupar el historial">
-          {ORDENES.map(o => <button type="button" key={o.valor} aria-pressed={orden === o.valor} title={o.titulo} onClick={() => cambiarOrden(o.valor)}>{o.nombre}</button>)}
+          {ORDENES.map(o => <button type="button" key={o.valor} aria-pressed={orden === o.valor} onClick={() => cambiarOrden(o.valor)}>{o.nombre}</button>)}
         </div>
       )}
 
@@ -235,7 +235,7 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, 
                     <span class="carpeta-flecha" /><span class="proyecto-nombre">{nombreCarpeta(cwd)}</span> <span class="grupo-cuenta">{lista.length}</span>
                   </button>
                   <span class="agente-acciones">
-                    <button type="button" class="agente-accion" title="Abrir en otro escritorio" aria-label="Abrir la carpeta en otro escritorio"
+                    <button type="button" class="agente-accion" aria-label="Abrir la carpeta en otro escritorio"
                       onClick={() => enviar({ t: 'abrir', con: 'carpetaAparte', cwd })}><Icono nombre="abrir" /></button>
                     <button type="button" class="agente-accion" title={`Agente nuevo en ${rutaCorta(cwd)}`} aria-label="Agente nuevo en esta carpeta"
                       onClick={() => { cambiarBorrador({ cwd }); onNuevo(); }}><Icono nombre="nuevo" /></button>

@@ -7,6 +7,7 @@ import { enviar, estado, leerArchivo, urlMedio, ver, avisar, borrarArchivo, clav
 import { Docx, Pdf } from './Paginas.tsx';
 import { renderizar } from '../md.ts';
 import { Codigo } from './Documento.tsx';
+import { Imagen } from './Imagen.tsx';
 import { BotonIcono, Desplegable, Papelera } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
 import { lenguajeDe, nombreCarpeta, rutaCorta } from '../util.ts';
@@ -113,7 +114,7 @@ function Vista({ ruta, cwd, firma, id }: { ruta: string; cwd: string; firma: num
   else if (c.tipo === 'audio/*') cuerpo = <div class="visor-medio"><audio src={c.url} controls preload="metadata" /></div>;
   else if (c.datos && c.tipo === 'application/pdf') cuerpo = <Pdf datos={c.datos} />;
   else if (c.datos) cuerpo = <Docx datos={c.datos} />;
-  else if (c.tipo.startsWith('image/')) cuerpo = <div class="visor-imagen"><img src={c.url} alt={nombre} onClick={e => (e.currentTarget as HTMLElement).classList.toggle('real')} title="Clic: tamaño real" /></div>;
+  else if (c.tipo.startsWith('image/')) cuerpo = <Imagen key={c.url} url={c.url!} nombre={nombre} />;
   else if (c.texto !== undefined && esHtml && !fuente) cuerpo = <iframe class="visor-marco visor-html" sandbox="" srcdoc={c.texto} title={nombre} />;
   else if (c.texto !== undefined && esMd && !fuente) cuerpo = <div class="md visor-md" dangerouslySetInnerHTML={{ __html: html }} />;
   else if (c.texto !== undefined) cuerpo = <Codigo texto={c.texto.length > 400000 ? c.texto.slice(0, 400000) + '\n… (recortado)' : c.texto} lenguaje={lenguajeDe(ruta)} />;

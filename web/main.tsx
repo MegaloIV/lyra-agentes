@@ -1,9 +1,11 @@
+import { Terminales, comandosTerminal } from './componentes/Terminales.tsx';
 import { render } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks';
 import './estilo.css';
 import { estado, suscribir, elegir, enviar, avisar, renombrar, abrirPanel, ver, guardarLocal, mostrarError, type Panel } from './tienda.ts';
 import type { Objetivo } from './tienda.ts';
 import { BotonIcono, TituloEditable } from './componentes/Acciones.tsx';
+import { Icono } from './componentes/iconos.tsx';
 import { Barra } from './componentes/Barra.tsx';
 import { Turnos, armarTurnos, armarIndice, type Entrada } from './componentes/Documento.tsx';
 import { Redactor } from './componentes/Redactor.tsx';
@@ -99,7 +101,7 @@ function guardarArchivo(nombre: string, texto: string) {
 const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
 
 /** Ancho del panel derecho, uno por pestaña (índice, visor, GitHub, memorias); se cambia arrastrando su borde */
-const ANCHOS = { indice: 240, visor: 460, github: 380, memorias: 340 };
+const ANCHOS = { indice: 240, visor: 460, github: 380, memorias: 340, terminales: 460 };
 function leerAnchos(): Record<Exclude<Panel, null>, number> {
   try { return { ...ANCHOS, ...JSON.parse(localStorage.getItem('lyra-anchos') || '{}') }; } catch { return { ...ANCHOS }; }
 }
@@ -168,6 +170,7 @@ function App() {
       if (e.ctrlKey && k === 'i') { e.preventDefault(); alternar('indice'); return; }
       if (e.ctrlKey && k === 'o') { e.preventDefault(); alternar('visor'); return; }
       if (e.ctrlKey && k === 'g') { e.preventDefault(); alternar('github'); return; }
+      if (e.ctrlKey && k === 't') { e.preventDefault(); alternar('terminales'); return; }
       if (e.ctrlKey && k === 'm') { e.preventDefault(); alternar('memorias'); return; }
       if (e.key === 'F2' && estado.vista) { e.preventDefault(); estado.editando = 'cabecera'; avisar(); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
@@ -225,7 +228,10 @@ function App() {
       <BotonIcono icono="indice" titulo="Índice (Ctrl+I)" activo={panel === 'indice'} onClick={() => alternar('indice')} />
       <BotonIcono icono="visor" titulo={hayNuevos ? 'Visor: hay archivos nuevos (Ctrl+O)' : 'Visor de archivos e imágenes (Ctrl+O)'} activo={panel === 'visor'} data-nuevo={hayNuevos ? 'true' : undefined} onClick={() => alternar('visor')} />
       <BotonIcono icono="rama" titulo="GitHub: cambios, PR, pruebas e issues de esta carpeta (Ctrl+G)" activo={panel === 'github'} onClick={() => alternar('github')} />
-      <BotonIcono icono="memoria" titulo="Memorias de Claude, Codex, Gemini y el local (Ctrl+M)" activo={panel === 'memorias'} onClick={() => alternar('memorias')} />
+      <button type="button" class="icono-boton terminales-pestana" aria-label="Terminales" aria-pressed={panel === 'terminales'} onClick={() => alternar('terminales')}>
+        <Icono nombre="terminal" />{comandosTerminal(doc?.bloques || []).filter(b => b.estado === 'corriendo').length > 0 && <span class="terminales-contador">{comandosTerminal(doc?.bloques || []).filter(b => b.estado === 'corriendo').length}</span>}
+      </button>
+      <BotonIcono icono="memoria" titulo="Memorias de Claude, Codex y el local (Ctrl+M)" activo={panel === 'memorias'} onClick={() => alternar('memorias')} />
     </div>
   );
 
@@ -241,9 +247,9 @@ function App() {
         ) : (
           <>
             <header class="lectura-cabecera">
-              <button class="boton-menu" title="Conversaciones" onClick={() => setCajon(x => !x)}>☰</button>
+              <button class="boton-menu" aria-label="Conversaciones" onClick={() => setCajon(x => !x)}>☰</button>
               <div class="lectura-titulos">
-                <h1 class="lectura-titulo" title={objetivo ? `${titulo}\nDoble clic o F2 para renombrar` : undefined}>
+                <h1 class="lectura-titulo">
                   {objetivo ? <TituloEditable clave="cabecera" titulo={titulo} clase="lectura-titulo-texto" onGuardar={t => renombrar(objetivo, t)} /> : titulo}
                 </h1>
                 <span class="lectura-ruta">{v ? rutaCorta(cwd) : rutaCorta(estado.borrador.cwd) || '~/'}{sesion && !agente ? ` · ${haceCuanto(sesion.modificado)}` : ''}</span>
@@ -280,15 +286,16 @@ function App() {
       </main>
       {v && panel && (
         <aside class="panel" data-modo={panel}>
-          <div class="panel-borde" onPointerDown={arrastrarBorde} onDblClick={() => anchoDeSiempre(panel)} title="Arrastra para cambiar el ancho (doble clic: el de siempre)" />
+          <div class="panel-borde" onPointerDown={arrastrarBorde} onDblClick={() => anchoDeSiempre(panel)} />
           <header class="panel-cabecera">
-            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : panel === 'memorias' ? 'Memorias' : 'Visor'}</span>
+            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : panel === 'terminales' ? 'Terminales' : panel === 'memorias' ? 'Memorias' : 'Visor'}</span>
             <BotonIcono icono="cerrar" titulo="Cerrar el panel" onClick={() => ponerPanel(null)} />
           </header>
           <div class="panel-cuerpo">
             {panel === 'indice'
               ? <Indice entradas={entradas.lista} activo={entradas.activo} onIr={id => { setIrA(x => ({ id, vez: x.vez + 1 })); if (angosto) setPanelAngosto(null); }} />
               : panel === 'github' ? <Github cwd={cwd} turnos={turnos} />
+              : panel === 'terminales' ? <Terminales key={claveDoc} bloques={doc?.bloques || []} />
               : panel === 'memorias' ? <Memorias cwd={cwd} proveedor={proveedor} />
               : <Visor bloques={doc?.bloques || []} cwd={cwd} />}
           </div>

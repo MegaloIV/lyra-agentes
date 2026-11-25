@@ -1,4 +1,4 @@
-// JSON-RPC por stdio (una línea por mensaje): lo hablan `codex app-server` y `gemini --acp`.
+// JSON-RPC por stdio (una línea por mensaje): lo hablan `codex app-server`.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 

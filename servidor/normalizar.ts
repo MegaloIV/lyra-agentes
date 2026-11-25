@@ -39,7 +39,7 @@ export function crearNormalizador(cwd = '') {
           if (c.type === 'tool_use') {
             const nombre = cadena(c.name), entrada = objeto(c.input), toolId = cadena(c.id);
             if (herramientas.has(toolId)) return;
-            const bloque: Extract<Bloque, { tipo: 'herramienta' }> = { tipo: 'herramienta', id: toolId, nombre, entrada, ...resumir(nombre, entrada, cwd), estado: 'corriendo', detalle: detalleHerramienta(nombre, entrada), padre };
+            const bloque: Extract<Bloque, { tipo: 'herramienta' }> = { tipo: 'herramienta', id: toolId, nombre, entrada, ...resumir(nombre, entrada, cwd), estado: 'corriendo', terminal: nombre === 'Bash' ? { comando: cadena(entrada.command), descripcion: cadena(entrada.description) || undefined, carpeta: cadena(entrada.cwd) || cwd, inicio: fechaMensaje(msg) } : undefined, detalle: detalleHerramienta(nombre, entrada), padre };
             herramientas.set(toolId, bloque); agregar(bloque);
             if (nombre === 'TodoWrite') {
               const tid = `tareas-${turno}-${canal}`, items = (Array.isArray(entrada.todos) ? entrada.todos : []).map(objeto).map(t => ({ texto: cadena(t.content), estado: t.status === 'completed' ? 'hecha' as const : t.status === 'in_progress' ? 'en_curso' as const : 'pendiente' as const }));
@@ -53,7 +53,7 @@ export function crearNormalizador(cwd = '') {
           const h = herramientas.get(cadena(c.tool_use_id));
           if (h) {
             const salida = typeof c.content === 'string' ? c.content : Array.isArray(c.content) ? c.content.map(objeto).map(p => cadena(p.text)).join('\n') : '';
-            ops.push({ op: 'actualizar', id: h.id, cambios: { estado: c.is_error ? 'error' : 'ok', detalle: c.is_error ? { clase: 'codigo', texto: recortar(salida) } : detalleHerramienta(h.nombre, h.entrada, salida) } });
+            ops.push({ op: 'actualizar', id: h.id, cambios: { estado: c.is_error ? 'error' : 'ok', ...(h.terminal ? { terminal: { ...h.terminal, salida, codigo: codigoSalida(objeto((msg as unknown as Record<string, unknown>).tool_use_result), salida), duracionMs: Math.max(0, fechaMensaje(msg) - (h.terminal.inicio || fechaMensaje(msg))) } } : {}), detalle: c.is_error ? { clase: 'codigo', texto: recortar(salida) } : detalleHerramienta(h.nombre, h.entrada, salida) } });
           }
         }
         const crudo = msg as unknown as Record<string, unknown>;
@@ -96,4 +96,17 @@ export function limpiarUsuario(texto: string): { tipo: 'usuario' | 'resumen' | '
 export function textoError(errores: string[]): string {
   const utiles = errores.filter(e => e.trim() && !e.trim().startsWith('[ede_diagnostic]'));
   return utiles.length ? utiles.join('\n') : 'Se detuvo antes de terminar.';
+}
+
+/** Usa las fechas guardadas también al leer el historial. */
+function fechaMensaje(msg: unknown): number {
+  const fecha = objeto(msg).timestamp;
+  const n = typeof fecha === 'string' ? Date.parse(fecha) : NaN;
+  return Number.isFinite(n) ? n : Date.now();
+}
+function codigoSalida(resultado: Record<string, unknown>, salida: string): number | undefined {
+  if (typeof resultado.exitCode === 'number') return resultado.exitCode;
+  if (typeof resultado.exit_code === 'number') return resultado.exit_code;
+  const m = /(?:Exit code:|Exit code|exited with code)\s*(\d+)/i.exec(salida);
+  return m ? Number(m[1]) : undefined;
 }

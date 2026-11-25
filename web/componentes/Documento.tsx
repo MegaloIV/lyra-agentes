@@ -11,7 +11,7 @@ import { contarAcciones, duracion, hora, lenguajeDe, textoPlano, type Herr } fro
 type Usuario = Extract<Bloque, { tipo: 'usuario' }>;
 type Turno = { id: string; usuario?: Usuario; cuerpo: Bloque[] };
 type Hijos = Map<string, Bloque[]>;
-/** Quién trabaja en el documento: Claude, Codex o Gemini */
+/** Quién trabaja en el documento: Claude, Codex o el local */
 const Quien = createContext('Claude');
 
 /** Separa los bloques en turnos (uno por mensaje del usuario) y aparta el trabajo de los subagentes */
@@ -96,7 +96,7 @@ function Herramienta({ h, hijos, cwd }: { h: Herr; hijos: Hijos; cwd: string }) 
         <summary>
           <span class="herramienta-icono"><Icono nombre={h.icono} /></span>
           <span class="herramienta-texto" dangerouslySetInnerHTML={{ __html: resumen + (sub?.length ? ` <span class="herramienta-sub">· ${sub.filter(b => b.tipo === 'herramienta').length} acciones</span>` : '') }} />
-          {ruta && <button type="button" class="herramienta-ver" title="Ver en el panel" aria-label="Ver en el panel" onClick={e => { e.preventDefault(); e.stopPropagation(); ver(ruta, cwd); }}><Icono nombre="visor" tam={14} /></button>}
+          {ruta && <button type="button" class="herramienta-ver" aria-label="Ver en el panel" onClick={e => { e.preventDefault(); e.stopPropagation(); ver(ruta, cwd); }}><Icono nombre="visor" tam={14} /></button>}
         </summary>
         {abierto && (
           <div class="herramienta-detalle">

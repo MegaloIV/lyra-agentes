@@ -7,13 +7,12 @@ import { aplicarOps } from './protocolo.ts';
 import type { Agente, Contexto, Respuesta } from './motor.ts';
 import { MotorClaude, cargarClaude, historialClaude, tituloClaude } from './claude.ts';
 import { MotorCodex, cargarCodex, historialCodex } from './codex.ts';
-import { MotorGemini, cargarGemini, historialGemini } from './gemini.ts';
 import { instalado } from './motor.ts';
 import { sesionesLocales } from './local.ts';
 import { borrarSesion, renombrarSesion } from './papelera.ts';
 
 export type { Agente };
-const NOMBRES: Record<Proveedor, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', local: 'El agente local' };
+const NOMBRES: Record<Proveedor, string> = { claude: 'Claude', codex: 'Codex', local: 'El agente local' };
 
 export class GestorAgentes implements Contexto {
   agentes = new Map<string, Agente>();
@@ -67,14 +66,12 @@ export class GestorAgentes implements Contexto {
       // Las locales se guardan con las de Claude: se distinguen por el registro
       historialClaude().then(l => l.map(s => s.sessionId in locales ? { ...s, proveedor: 'local' as const } : s)).catch(() => []),
       instalado('codex') ? historialCodex().catch(() => []) : [],
-      historialGemini().catch(() => []),
     ]);
     return partes.flat().sort((a, b) => b.modificado - a.modificado);
   }
 
   async cargar(proveedor: Proveedor, sessionId: string, cwd: string): Promise<Bloque[]> {
     if (proveedor === 'codex') return cargarCodex(sessionId, cwd);
-    if (proveedor === 'gemini') return cargarGemini(sessionId, cwd);
     return (await cargarClaude(sessionId, cwd)).bloques;
   }
 
@@ -97,7 +94,7 @@ export class GestorAgentes implements Contexto {
     const a: Agente = { id: randomUUID(), proveedor, sessionId: reanudar, cwd, titulo: titulo || prompt?.slice(0, 60) || 'Nuevo agente', estado: 'iniciando', modelo: opciones.modelo, esfuerzo: opciones.esfuerzo,
       modo: opciones.modo || 'default', sinLeer: false, ultimaActividad: Date.now(), bloques, pendientes: new Map(), cerrado: false, motor: undefined! };
     if (proveedor === 'local' && reanudar && !a.modelo) a.modelo = (await sesionesLocales())[reanudar] || undefined;
-    a.motor = proveedor === 'codex' ? new MotorCodex(this, a) : proveedor === 'gemini' ? new MotorGemini(this, a) : new MotorClaude(this, a, normalizador, proveedor === 'local');
+    a.motor = proveedor === 'codex' ? new MotorCodex(this, a) : new MotorClaude(this, a, normalizador, proveedor === 'local');
     this.agentes.set(a.id, a); this.barra(); this.emitir({ t: 'documento', agente: a.id, bloques: a.bloques });
     a.motor.iniciar();
     if (prompt) this.enviar(a.id, prompt);

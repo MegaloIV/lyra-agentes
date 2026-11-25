@@ -1,8 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aplicarOps, type Bloque } from '../servidor/protocolo.ts';
+import { type Bloque } from '../servidor/protocolo.ts';
 import { bloquesDeItem, bloquesDeHilo, comandoLimpio, lineasDiff, tareasDePlan } from '../servidor/normalizarCodex.ts';
-import { crearNormalizadorGemini } from '../servidor/gemini.ts';
 import { errorLegible } from '../servidor/motor.ts';
 
 test('Codex: el comando sale sin el envoltorio de bash', () => {
@@ -55,26 +54,3 @@ test('Codex: un hilo guardado se arma con usuario, respuesta y fin', () => {
   assert.equal(bloques[4]!.tipo === 'fin' && bloques[4]!.error, 'Se acabó tu cuota de Codex. Vuelve a estar disponible a las 2:52 PM.');
 });
 
-test('Gemini: los trozos de texto se juntan y una herramienta corta el párrafo', () => {
-  const n = crearNormalizadorGemini('/p'); let bloques: Bloque[] = [];
-  const dar = (u: Record<string, unknown>) => { bloques = aplicarOps(bloques, n.procesar(u, bloques)); };
-  n.turno();
-  dar({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Ho' } });
-  dar({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'la' } });
-  dar({ sessionUpdate: 'tool_call', toolCallId: 'x', title: 'ReadFile', kind: 'read', status: 'in_progress', locations: [{ path: '/p/a.md' }] });
-  dar({ sessionUpdate: 'tool_call_update', toolCallId: 'x', status: 'completed' });
-  dar({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Listo' } });
-  bloques = aplicarOps(bloques, n.cerrar(bloques));
-  assert.deepEqual(bloques.map(b => b.tipo), ['texto', 'herramienta', 'texto']);
-  assert.equal(bloques[0]!.tipo === 'texto' && bloques[0]!.md, 'Hola');
-  const h = bloques[1] as Extract<Bloque, { tipo: 'herramienta' }>;
-  assert.equal(h.resumen, 'Leyó `a.md`'); assert.equal(h.estado, 'ok');
-  assert.equal(bloques.every(b => b.tipo !== 'texto' || !b.enCurso), true);
-});
-
-test('Gemini: un diff de edición se dibuja con + y -', () => {
-  const n = crearNormalizadorGemini('/p');
-  const ops = n.procesar({ sessionUpdate: 'tool_call', toolCallId: 'e', title: 'Edit', kind: 'edit', status: 'pending', locations: [{ path: '/p/a.ts' }], content: [{ type: 'diff', path: '/p/a.ts', oldText: 'a\n', newText: 'b\n' }] }, []);
-  const b = ops[0]!.op === 'agregar' ? ops[0]!.bloque : undefined;
-  assert.equal(b?.tipo === 'herramienta' && b.detalle?.clase === 'diff' && b.detalle.lineas.map(l => l.tipo).join(''), '-+');
-});

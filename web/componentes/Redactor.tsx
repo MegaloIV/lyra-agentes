@@ -20,7 +20,7 @@ const TEXTO_ESTADO: Record<string, string> = {
 function Chip({ id, abierto, setAbierto, texto, titulo, datos, children }: { id: string; abierto: string; setAbierto: (v: string) => void; texto: preact.ComponentChildren; titulo: string; datos?: Record<string, string | undefined>; children?: preact.ComponentChildren }) {
   return (
     <span class="ancla">
-      <button type="button" class="chip" data-chip={id} title={titulo} aria-expanded={abierto === id} {...datos} onClick={() => setAbierto(abierto === id ? '' : id)}>{texto}</button>
+      <button type="button" class="chip" data-chip={id} title={titulo || undefined} aria-expanded={abierto === id} {...datos} onClick={() => setAbierto(abierto === id ? '' : id)}>{texto}</button>
       {abierto === id && <Desplegable clase="desplegable-arriba" onCerrar={() => setAbierto('')}>{children}</Desplegable>}
     </span>
   );
@@ -43,7 +43,7 @@ function Explorador({ desde, alElegir }: { desde: string; alElegir: (ruta: strin
   return (
     <div class="explorador">
       <div class="explorador-ruta">
-        {arriba && <button type="button" class="explorador-subir" title="Subir un nivel" onClick={() => explorar(arriba)}>‹</button>}
+        {arriba && <button type="button" class="explorador-subir" onClick={() => explorar(arriba)}>‹</button>}
         {niveles.map((n, i) => (
           <span key={n.ruta} class="explorador-nivel">
             {i > 0 && n.nombre !== '/' && niveles[i - 1]!.nombre !== '/' && <span class="explorador-sep">/</span>}
@@ -89,9 +89,9 @@ function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boole
   return (
     <>
       {nuevo ? (
-        <Chip id="proveedor" abierto={abierto} setAbierto={setAbierto} titulo="Con quién trabajar" datos={{ 'data-proveedor': proveedor }} texto={<><span class="proveedor-punto" />{nombreProveedor(proveedor)}</>}>
+        <Chip id="proveedor" abierto={abierto} setAbierto={setAbierto} titulo="" datos={{ 'data-proveedor': proveedor }} texto={<><span class="proveedor-punto" />{nombreProveedor(proveedor)}</>}>
           {PROVEEDORES.map(p => {
-            const i = info(p.id), nota = i && !i.instalado ? 'no instalado' : p.id === 'codex' && i?.cuota?.agotada ? 'sin cuota' : p.id === 'gemini' && i?.instalado && !i.sesion ? 'sin sesión' : p.id === 'local' && i?.instalado && !i.sesion ? 'sin modelos' : '';
+            const i = info(p.id), nota = i && !i.instalado ? 'no instalado' : p.id === 'codex' && i?.cuota?.agotada ? 'sin cuota' : p.id === 'local' && i?.instalado && !i.sesion ? 'sin modelos' : '';
             return (
               <Opcion key={p.id} actual={p.id === proveedor} al={() => { if (i && !i.instalado) return; cambiarBorrador({ proveedor: p.id, modelo: '', esfuerzo: '', modo: info(p.id)?.modos.some(m => m.valor === b.modo) ? b.modo : 'default' }); cerrar(); }}>
                 <span class="proveedor-punto" data-proveedor={p.id} />{p.nombre}{nota && <small>{nota}</small>}
@@ -106,13 +106,13 @@ function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boole
       </Chip>
 
       {esfuerzos.length > 0 && (
-        <Chip id="esfuerzo" abierto={abierto} setAbierto={setAbierto} titulo="Cuánto razona antes de responder" texto={<><Icono nombre="chispa" tam={12} />{nombreEsfuerzo(esfuerzo || undefined).replace('Esfuerzo normal', 'Normal')}</>}>
+        <Chip id="esfuerzo" abierto={abierto} setAbierto={setAbierto} titulo="" texto={<><Icono nombre="chispa" tam={12} />{nombreEsfuerzo(esfuerzo || undefined).replace('Esfuerzo normal', 'Normal')}</>}>
           <Opcion actual={!esfuerzo} al={() => ponerEsfuerzo(null)}>{modelo?.esfuerzoDefecto ? `Normal (${nombreEsfuerzo(modelo.esfuerzoDefecto).toLowerCase()})` : 'Normal'}</Opcion>
           {esfuerzos.map(e => <Opcion key={e} actual={e === esfuerzo} al={() => ponerEsfuerzo(e)}>{nombreEsfuerzo(e)}</Opcion>)}
         </Chip>
       )}
 
-      <Chip id="modo" abierto={abierto} setAbierto={setAbierto} titulo="Permisos: qué puede hacer sin preguntarte (Shift+Tab cambia)" datos={{ 'data-modo': modo }} texto={<><Icono nombre="escudo" tam={12} />{nombreModo(modo, proveedor)}</>}>
+      <Chip id="modo" abierto={abierto} setAbierto={setAbierto} titulo="" datos={{ 'data-modo': modo }} texto={<><Icono nombre="escudo" tam={12} />{nombreModo(modo, proveedor)}</>}>
         {/* «Sin preguntar» solo al crear: los proveedores no lo aceptan después */}
         {modos.filter(m => nuevo || m.valor !== 'bypassPermissions').map(m => <Opcion key={m.valor} actual={m.valor === modo} al={() => ponerModo(m.valor)}>{m.nombre}</Opcion>)}
       </Chip>
@@ -132,12 +132,13 @@ function Ajustes({ agente, nuevo, solo }: { agente?: ResumenAgente; nuevo: boole
         </Chip>
       ) : <span class="chip" data-chip="carpeta" title={rutaCorta(cwd)}><Icono nombre="carpeta" tam={12} />{nombreCarpeta(cwd)}</span>}
 
-      {agente?.contexto && <span class="chip" data-chip="contexto" title="Contexto usado">{miles(agente.contexto.usados)} / {miles(agente.contexto.total)}</span>}
+      {agente?.contexto && <span class="chip" data-chip="contexto">{miles(agente.contexto.usados)} / {miles(agente.contexto.total)}</span>}
     </>
   );
 }
 
 export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgente }) {
+  const prefijo = useRef(0);
   const caja = useRef<HTMLTextAreaElement>(null);
   const [texto, setTexto] = useState(() => borradores.get(clave(vista)) || '');
   const [elegido, setElegido] = useState(0);
@@ -146,7 +147,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   const k = clave(vista);
   const nuevo = vista === null;
 
-  useEffect(() => { setTexto(borradores.get(k) || ''); setElegido(0); setPopupCerrado(false); caja.current?.focus(); }, [k]);
+  useEffect(() => { prefijo.current = 0; setTexto(borradores.get(k) || ''); setElegido(0); setPopupCerrado(false); caja.current?.focus(); }, [k]);
   useEffect(() => { borradores.set(k, texto); }, [texto, k]);
   useLayoutEffect(() => {
     const t = caja.current; if (!t) return;
@@ -210,6 +211,21 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
 
   function tecla(e: KeyboardEvent) {
     if (e.isComposing) return;
+    const letra = e.key.toLowerCase();
+    if (e.ctrlKey && !e.altKey && !e.metaKey && letra === 'x') { if (!e.repeat) prefijo.current = Date.now(); return; }
+    if (e.ctrlKey && !e.altKey && !e.metaKey && letra === 's') {
+      e.preventDefault();
+      if (!e.repeat && prefijo.current && Date.now() - prefijo.current <= 1500) mandar();
+      prefijo.current = 0; return;
+    }
+    if (!['Control', 'Shift'].includes(e.key)) prefijo.current = 0;
+    if (e.ctrlKey && letra === 'c') {
+      const c = caja.current;
+      if (window.getSelection()?.toString() || (c && c.selectionStart !== c.selectionEnd)) return;
+      e.preventDefault();
+      if (!e.repeat && trabajando && agente) enviar({ t: 'interrumpir', agente: agente.id });
+      return;
+    }
     if (filtrados.length) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setElegido((indice + 1) % filtrados.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setElegido((indice - 1 + filtrados.length) % filtrados.length); return; }
@@ -240,9 +256,6 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
       {nuevo && datosNuevo?.id === 'local' && datosNuevo.sesion && (
         <div class="redactor-aviso redactor-aviso-suave">Corre en tu computadora: nada sale de ella, pero es más lento que los otros.</div>
       )}
-      {nuevo && datosNuevo?.id === 'gemini' && datosNuevo.instalado && !datosNuevo.sesion && (
-        <div class="redactor-aviso">Gemini necesita una clave de API de Google AI Studio (es gratis). <button type="button" class="enlace" onClick={() => enviar({ t: 'abrir', con: 'loginGemini' })}>Poner la clave</button></div>
-      )}
       {nuevo && cuota && (cuota.agotada || cuota.usado >= 80) && (
         <div class="redactor-aviso" data-nivel={cuota.agotada ? 'error' : 'info'}>{cuota.agotada ? 'Se acabó tu cuota de Codex' : `Usaste el ${cuota.usado} % de tu cuota de Codex`}{cuota.renueva ? `; vuelve ${horaDe(cuota.renueva)}.` : '.'}</div>
       )}
@@ -259,13 +272,13 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
         <textarea ref={caja} class="redactor-texto" rows={1} value={texto}
           placeholder={soloLectura ? 'Escribe para retomar esta conversación…' : nuevo ? `¿Qué hacemos? (Enter envía · Shift+Enter, nueva línea)` : `Escribe a ${quien}…`}
           onInput={e => { setTexto((e.currentTarget as HTMLTextAreaElement).value); setPopupCerrado(false); setElegido(0); }}
-          onKeyDown={tecla} />
+          onKeyDown={tecla} onBlur={() => { prefijo.current = 0; }} />
         <div class="redactor-barra">
           <div class="ajustes"><Ajustes agente={agente} nuevo={nuevo} solo={vista?.tipo === 'sesion' ? vista.proveedor : undefined} /></div>
           <span class="redactor-estado">{textoEstado}</span>
-          {agente?.estado === 'error' && agente.sessionId && <button type="button" class="icono-boton" title="Reanudar" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd, proveedor: agente.proveedor })}><Icono nombre="recargar" /></button>}
-          {trabajando && <button type="button" class="boton-detener" title="Detener (Esc dos veces)" aria-label="Detener" onClick={() => agente && enviar({ t: 'interrumpir', agente: agente.id })}><Icono nombre="detener" /></button>}
-          <button type="button" class="boton-enviar" title={trabajando ? 'Poner en cola (Enter)' : 'Enviar (Enter)'} aria-label="Enviar" disabled={!texto.trim() || !!falta} onClick={mandar}><Icono nombre="enviar" /></button>
+          {agente?.estado === 'error' && agente.sessionId && <button type="button" class="icono-boton" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd, proveedor: agente.proveedor })}><Icono nombre="recargar" /></button>}
+          {trabajando && <button type="button" class="boton-detener" aria-label="Detener" onClick={() => agente && enviar({ t: 'interrumpir', agente: agente.id })}><Icono nombre="detener" /></button>}
+          <button type="button" class="boton-enviar" aria-label="Enviar" disabled={!texto.trim() || !!falta} onClick={mandar}><Icono nombre="enviar" /></button>
         </div>
       </div>
     </footer>

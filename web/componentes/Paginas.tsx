@@ -12,7 +12,7 @@ function Zoom({ zoom, setZoom, extra }: { zoom: number; setZoom: (z: number) => 
     <div class="paginas-barra">
       {extra && <span class="paginas-info">{extra}</span>}
       <BotonIcono icono="menos" titulo="Alejar" disabled={i <= 0} onClick={() => setZoom(ZOOMS[Math.max(0, i - 1)]!)} />
-      <button type="button" class="paginas-zoom" title="Ajustar al ancho" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+      <button type="button" class="paginas-zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
       <BotonIcono icono="nuevo" titulo="Acercar" disabled={i >= ZOOMS.length - 1} onClick={() => setZoom(ZOOMS[Math.min(ZOOMS.length - 1, i + 1)]!)} />
     </div>
   );

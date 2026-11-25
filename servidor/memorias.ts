@@ -2,7 +2,6 @@
 //   Claude  ~/.claude/CLAUDE.md y rules/, los CLAUDE.md del proyecto y la memoria automática de cada proyecto
 //           (~/.claude/projects/<proyecto>/memory/, el proyecto es la raíz del repo git o la carpeta)
 //   Codex   ~/.codex/AGENTS.md, los AGENTS.md del proyecto y lo que arma en ~/.codex/memories/
-//   Gemini  ~/.gemini/GEMINI.md (ahí guarda lo que le pides recordar) y los GEMINI.md del proyecto
 //   Local   es Claude Code con un modelo de Ollama: los CLAUDE.md del proyecto y la misma memoria automática
 // Solo se listan: el contenido se abre en el visor, que deja leer estas rutas y ninguna otra oculta.
 import { existsSync } from 'node:fs';
@@ -114,7 +113,7 @@ async function memoriaAutomatica(cwd: string): Promise<{ propia: GrupoMemoria; o
   return { propia, otras };
 }
 
-/** Instrucciones del proyecto de un proveedor (CLAUDE.md, AGENTS.md, GEMINI.md…), de la carpeta hacia arriba */
+/** Instrucciones del proyecto de un proveedor (CLAUDE.md, AGENTS.md…), de la carpeta hacia arriba */
 async function delProyecto(cwd: string, nombres: string[]): Promise<ArchivoMemoria[]> {
   const rutas: [string, string][] = [];
   for (const d of haciaArriba(cwd)) for (const n of nombres) rutas.push([join(d, n), corta(join(d, n))]);
@@ -140,15 +139,11 @@ export async function memorias(cwdPedido: string): Promise<MemoriasProveedor[]> 
     grupo('Generales (todas las carpetas)', 'general', await juntar([[join(CASA, '.codex/AGENTS.override.md'), '~/.codex/AGENTS.override.md'], [join(CASA, '.codex/AGENTS.md'), '~/.codex/AGENTS.md']])),
     grupo('Memorias que armó Codex', 'general', await mdsDe(codexMem, 2)),
   ], nota: existsSync(codexMem) ? undefined : 'Codex todavía no guardó memorias: las arma en ~/.codex/memories cuando tiene activada su función de memoria.' };
-  const gemini: MemoriasProveedor = { proveedor: 'gemini', grupos: [
-    grupo('Instrucciones del proyecto', 'proyecto', await delProyecto(cwd, ['GEMINI.md'])),
-    grupo('Generales (aquí guarda lo que le pides recordar)', 'general', await juntar([[join(CASA, '.gemini/GEMINI.md'), '~/.gemini/GEMINI.md']])),
-  ], nota: 'Cuando le pides «recuerda que…», Gemini lo agrega a ~/.gemini/GEMINI.md.' };
   const local: MemoriasProveedor = { proveedor: 'local', grupos: [
     { ...auto.propia, titulo: auto.propia.titulo + ' (la misma de Claude)' },
     grupo('Instrucciones del proyecto', 'proyecto', claudeProyecto),
   ], nota: 'El agente local es Claude Code con tu modelo de Ollama: lee los CLAUDE.md del proyecto y comparte con Claude la memoria automática; no lee ~/.claude/CLAUDE.md.' };
-  return [claude, codex, gemini, local];
+  return [claude, codex, local];
 }
 
 /** Para el visor: estas rutas ocultas se pueden leer (relativas a tu carpeta personal, solo .md) */
@@ -157,7 +152,6 @@ const MEMORIAS_LEGIBLES = [
   /^\.claude\/rules\/[^/]+\.md$/,
   /^\.codex\/AGENTS(\.override)?\.md$/,
   /^\.codex\/memories\/(?:[^/.][^/]*\/){0,2}[^/]+\.md$/,
-  /^\.gemini\/GEMINI\.md$/,
   /(?:^|\/)\.claude\/CLAUDE\.md$/,
 ];
 export const esMemoriaLegible = (dentro: string) => MEMORIAS_LEGIBLES.some(r => r.test(dentro.split(sep).join('/')));

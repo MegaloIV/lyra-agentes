@@ -1,4 +1,4 @@
-// Pestaña Memorias del panel derecho: lo que Claude, Codex, Gemini y el agente local recuerdan o leen siempre
+// Pestaña Memorias del panel derecho: lo que Claude, Codex y el agente local recuerdan o leen siempre
 // (servidor/memorias.ts). Empieza en el proveedor de la conversación; tocar un archivo lo abre en el visor.
 // Se vuelven a buscar cada vez que se abre la pestaña.
 import { useEffect, useState } from 'preact/hooks';
@@ -12,7 +12,7 @@ function Grupo({ g, cwd }: { g: GrupoMemoria; cwd: string }) {
     <ul class="git-lista">
       {g.archivos.map(a => (
         <li key={a.ruta}>
-          <button type="button" class="git-fila" title={`${a.ruta}\nCambió ${haceCuanto(a.modificado)}. Toca para leerlo en el visor`} onClick={() => ver(a.ruta, cwd)}>
+          <button type="button" class="git-fila" title={`${a.ruta}\nCambió ${haceCuanto(a.modificado)}`} onClick={() => ver(a.ruta, cwd)}>
             <Icono nombre="leer" tam={14} />
             <span class="git-fila-texto"><span>{a.nombre}</span>{a.descripcion && <small>{a.descripcion}</small>}</span>
           </button>
@@ -50,7 +50,7 @@ export function Memorias({ cwd, proveedor }: { cwd: string; proveedor: Proveedor
         {PROVEEDORES.map(x => {
           const n = info.proveedores!.find(y => y.proveedor === x.id)?.grupos.reduce((s, g) => s + g.archivos.length, 0) || 0;
           return (
-            <button type="button" key={x.id} class="mem-proveedor" data-proveedor={x.id} aria-pressed={elegido === x.id} title={`${x.nombre}: ${n} archivo${n === 1 ? '' : 's'}`} onClick={() => setElegido(x.id)}>
+            <button type="button" key={x.id} class="mem-proveedor" data-proveedor={x.id} aria-pressed={elegido === x.id} onClick={() => setElegido(x.id)}>
               <span class="proveedor-punto" />{x.nombre}
             </button>
           );

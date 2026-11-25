@@ -1,14 +1,15 @@
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 export type { PermissionMode };
-export type Proveedor = 'claude' | 'codex' | 'gemini' | 'local';
-/** Detalle listo para dibujar (Codex y Gemini lo mandan armado) y texto del botón «Permitir siempre» */
+export type Proveedor = 'claude' | 'codex' | 'local';
+/** Detalle listo para dibujar (Codex lo mandan armado) y texto del botón «Permitir siempre» */
 export type Solicitud = { id: string; agente: string; herramienta: string; entrada: Record<string, unknown>; titulo?: string; descripcion?: string; nombreCorto?: string; motivo?: string; rutaBloqueada?: string; haySugerencias: boolean; detalle?: Detalle; etiquetaSiempre?: string };
 export type Detalle = { clase: 'codigo'; lenguaje?: string; texto: string } | { clase: 'diff'; ruta: string; lineas: { tipo: '+' | '-' | ' '; texto: string }[] } | { clase: 'md'; texto: string };
+export type Terminal = { comando: string; descripcion?: string; carpeta?: string; salida?: string; codigo?: number; inicio?: number; duracionMs?: number };
 export type Bloque =
   | { tipo: 'usuario'; id: string; md: string; fecha: number; enCola?: boolean }
   | { tipo: 'texto'; id: string; md: string; enCurso: boolean; padre?: string }
   | { tipo: 'pensamiento'; id: string; md: string }
-  | { tipo: 'herramienta'; id: string; nombre: string; resumen: string; icono: string; estado: 'corriendo' | 'ok' | 'error'; entrada: unknown; detalle?: Detalle; padre?: string }
+  | { tipo: 'herramienta'; id: string; nombre: string; resumen: string; icono: string; estado: 'corriendo' | 'ok' | 'error'; entrada: unknown; detalle?: Detalle; terminal?: Terminal; padre?: string }
   | { tipo: 'tareas'; id: string; items: { texto: string; estado: 'pendiente' | 'en_curso' | 'hecha' }[] }
   | { tipo: 'permiso'; id: string; solicitud: Solicitud; estado: 'pendiente' | 'permitido' | 'rechazado' | 'cancelado' }
   | { tipo: 'pregunta'; id: string; solicitud: Solicitud; estado: 'pendiente' | 'respondida' | 'cancelada'; respuestas?: Record<string, string> }
@@ -61,7 +62,7 @@ export type ClienteMensaje =
   | { t: 'catalogo' }
   /** Los límites de uso; `fresco` los vuelve a pedir aunque haya unos recientes */
   | { t: 'limites'; fresco?: boolean }
-  | { t: 'abrir'; con: 'terminal' | 'carpeta' | 'carpetaAparte' | 'loginGemini'; cwd?: string }
+  | { t: 'abrir'; con: 'terminal' | 'carpeta' | 'carpetaAparte'; cwd?: string }
   /** Abre un archivo con su app (`ruta` relativa a `cwd`) */
   | { t: 'abrirArchivo'; ruta: string; cwd?: string; app?: string }
   /** Las apps que pueden abrir ese archivo (para «Abrir con…») */

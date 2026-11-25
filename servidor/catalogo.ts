@@ -2,7 +2,6 @@
 import type { InfoProveedor, Modelo } from './protocolo.ts';
 import { conEsfuerzoClaude, modelosClaude } from './claude.ts';
 import { infoCodex } from './codex.ts';
-import { infoGemini } from './gemini.ts';
 import { infoLocal } from './local.ts';
 
 export const MODOS_CLAUDE: InfoProveedor['modos'] = [
@@ -34,7 +33,6 @@ export async function catalogo(fresco = false): Promise<InfoProveedor[]> {
   armando ??= Promise.all([
     modelos().then(m => ({ id: 'claude' as const, nombre: 'Claude', instalado: true, sesion: true, modelos: m, modos: MODOS_CLAUDE })),
     infoCodex(),
-    infoGemini(),
     infoLocal().catch(() => ({ id: 'local' as const, nombre: 'Local', instalado: false, sesion: false, modelos: [], modos: [] })),
   ]).then(l => (ultimo = l)).finally(() => { armando = undefined; });
   return armando;

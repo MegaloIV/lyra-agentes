@@ -20,6 +20,16 @@ export function horaDe(ms: number) {
   return d.toDateString() === hoy.toDateString() ? `a las ${h}` : `el ${d.toLocaleDateString('es', { weekday: 'long', day: 'numeric' })} a las ${h}`;
 }
 
+/** Corto, para la barra de uso: «en 25 min», «18:30» o «mié 26, 09:00» */
+export function renuevaCorto(ms: number, ahora = Date.now()) {
+  const falta = ms - ahora, d = new Date(ms);
+  if (falta <= 0) return 'ya';
+  if (falta < 3600_000) return `en ${Math.max(1, Math.round(falta / 60_000))} min`;
+  const h = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date(ahora).toDateString()) return h;
+  return `${d.toLocaleDateString('es', { weekday: 'short' }).replace('.', '')} ${d.getDate()}, ${h}`;
+}
+
 export function haceCuanto(fecha: number): string {
   const s = Math.max(0, (Date.now() - fecha) / 1000);
   if (s < 45) return 'ahora';
@@ -59,7 +69,7 @@ export const MODOS = [
 ] as const;
 export const nombreModo = (m: string, proveedor?: Proveedor) => estado.catalogo.find(p => p.id === proveedor)?.modos.find(x => x.valor === m)?.nombre || MODOS.find(x => x.valor === m)?.nombre || m;
 
-export const PROVEEDORES: { id: Proveedor; nombre: string }[] = [{ id: 'claude', nombre: 'Claude' }, { id: 'codex', nombre: 'Codex' }, { id: 'gemini', nombre: 'Gemini' }, { id: 'local', nombre: 'Local' }];
+export const PROVEEDORES: { id: Proveedor; nombre: string }[] = [{ id: 'claude', nombre: 'Claude' }, { id: 'codex', nombre: 'Codex' }, { id: 'local', nombre: 'Local' }];
 export const nombreProveedor = (p?: Proveedor) => PROVEEDORES.find(x => x.id === p)?.nombre || 'Claude';
 export const info = (p?: Proveedor): InfoProveedor | undefined => estado.catalogo.find(x => x.id === (p || 'claude'));
 

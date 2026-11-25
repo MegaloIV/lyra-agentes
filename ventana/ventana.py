@@ -83,8 +83,26 @@ class Ventana(Gtk.Application):
         teclas = Gtk.EventControllerKey()
         teclas.connect("key-pressed", self.al_tecla)
         ventana.add_controller(teclas)
+        # El pellizco del touchpad: WebKit lo usa para agrandar toda la página; se lo quitamos y se lo pasamos a la
+        # página (el zoom de las imágenes del visor lo escucha como `lyra-pellizco`). La letra sigue con Ctrl + / −.
+        pellizco = Gtk.GestureZoom()
+        pellizco.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        pellizco.connect("begin", lambda g, _s: (g.set_state(Gtk.EventSequenceState.CLAIMED), self.pellizco(g, "inicio", 1.0)))
+        pellizco.connect("scale-changed", lambda g, escala: self.pellizco(g, "cambio", escala))
+        pellizco.connect("end", lambda g, _s: self.pellizco(g, "fin", 1.0))
+        vista.add_controller(pellizco)
         vista.load_uri(url)
         ventana.present()
+
+    def pellizco(self, gesto: Gtk.GestureZoom, fase: str, escala: float) -> None:
+        if not self.vista:
+            return
+        hay, x, y = gesto.get_bounding_box_center()
+        z = self.vista.get_zoom_level() or 1.0   # de píxeles de la ventana a píxeles de la página
+        x, y = (x / z, y / z) if hay else (-1.0, -1.0)
+        js = (f"window.dispatchEvent(new CustomEvent('lyra-pellizco', {{ detail: "
+              f"{{ fase: '{fase}', escala: {escala:.4f}, x: {x:.1f}, y: {y:.1f} }} }}))")
+        self.vista.evaluate_javascript(js, -1, None, None, None, None, None)
 
     def al_tecla(self, _c, tecla: int, _codigo: int, estado: Gdk.ModifierType) -> bool:
         """Ctrl + / − / 0: tamaño de la letra (zoom). Ctrl+R: recargar."""
