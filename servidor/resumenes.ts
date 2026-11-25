@@ -17,6 +17,8 @@ export function resumir(nombre: string, entrada: unknown, cwd = ''): { resumen: 
     case 'Bash': return r(cadena(e.description) || `Ejecutó \`${cadena(e.command).slice(0, 80)}\``, 'terminal');
     case 'BashOutput': return r('Revisó un proceso en segundo plano', 'terminal');
     case 'KillShell': return r('Detuvo un proceso en segundo plano', 'terminal');
+    case 'TaskOutput': return r('Revisó una tarea en segundo plano', 'terminal');
+    case 'TaskStop': return r('Detuvo una tarea en segundo plano', 'terminal');
     case 'Grep': return r(`Buscó «${cadena(e.pattern)}» en \`${ruta}\``, 'buscar');
     case 'Glob': return r(`Buscó archivos \`${cadena(e.pattern)}\``, 'buscar');
     case 'WebSearch': return r(`Buscó en la web «${cadena(e.query)}»`, 'web');

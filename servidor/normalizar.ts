@@ -1,11 +1,30 @@
 import type { SDKMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { Bloque, Op } from './protocolo.ts';
+import type { Bloque, Fondo, Op, Terminal } from './protocolo.ts';
 import { cadena, objeto, resumir, detalleHerramienta, recortar } from './resumenes.ts';
 export function crearNormalizador(cwd = '') {
   let serie = 0, turno = 0;
   const vistos = new Set<string>(), herramientas = new Map<string, Extract<Bloque, { tipo: 'herramienta' }>>();
   const flujos = new Map<string, { mensaje: string; textos: Map<number, string> }>();
   const tareas = new Set<string>();
+  // Lo último de cada comando (para las shells de fondo, que cambian después del tool_result) y qué tarea es cada una
+  const terminales = new Map<string, Terminal>(), porTarea = new Map<string, string>();
+  const ponerTerminal = (ops: Op[], id: string, cambios: Partial<Terminal>, estado?: 'ok' | 'error') => {
+    const t = terminales.get(id);
+    if (!t) return;
+    const nuevo = { ...t, ...cambios };
+    terminales.set(id, nuevo);
+    ops.push({ op: 'actualizar', id, cambios: { terminal: nuevo, ...(estado ? { estado } : {}) } });
+  };
+  /** Una shell de fondo terminó: por el aviso del SDK, el del historial o porque dejó de estar entre las vivas */
+  const avisadas = new Set<string>();
+  const terminarFondo = (ops: Op[], aviso: { tarea?: string; herramienta?: string; fondo: Fondo; codigo?: number; archivo?: string; fecha: number }, porLista = false) => {
+    const id = (aviso.herramienta && terminales.has(aviso.herramienta) ? aviso.herramienta : undefined) ?? (aviso.tarea ? porTarea.get(aviso.tarea) : undefined);
+    const t = id ? terminales.get(id) : undefined;
+    // El aviso manda sobre la lista (trae el código); cada aviso cuenta una vez (llega del SDK y también como mensaje)
+    if (!id || !t?.tarea || avisadas.has(id) || (porLista && t.fondo !== 'corriendo')) return;
+    if (!porLista) avisadas.add(id);
+    ponerTerminal(ops, id, { fondo: aviso.fondo, codigo: aviso.codigo ?? t.codigo, archivo: aviso.archivo || t.archivo, duracionMs: t.inicio ? Math.max(0, aviso.fecha - t.inicio) : t.duracionMs }, aviso.fondo === 'fallido' ? 'error' : 'ok');
+  };
   return { procesar(msg: SDKMessage | SessionMessage): Op[] {
     const ops: Op[] = [], agregar = (bloque: Bloque) => ops.push({ op: 'agregar', bloque });
     const padre = ('parent_tool_use_id' in msg ? msg.parent_tool_use_id : null) ?? undefined;
@@ -41,6 +60,7 @@ export function crearNormalizador(cwd = '') {
             if (herramientas.has(toolId)) return;
             const bloque: Extract<Bloque, { tipo: 'herramienta' }> = { tipo: 'herramienta', id: toolId, nombre, entrada, ...resumir(nombre, entrada, cwd), estado: 'corriendo', terminal: nombre === 'Bash' ? { comando: cadena(entrada.command), descripcion: cadena(entrada.description) || undefined, carpeta: cadena(entrada.cwd) || cwd, inicio: fechaMensaje(msg) } : undefined, detalle: detalleHerramienta(nombre, entrada), padre };
             herramientas.set(toolId, bloque); agregar(bloque);
+            if (bloque.terminal) terminales.set(toolId, bloque.terminal);
             if (nombre === 'TodoWrite') {
               const tid = `tareas-${turno}-${canal}`, items = (Array.isArray(entrada.todos) ? entrada.todos : []).map(objeto).map(t => ({ texto: cadena(t.content), estado: t.status === 'completed' ? 'hecha' as const : t.status === 'in_progress' ? 'en_curso' as const : 'pendiente' as const }));
               if (tareas.has(tid)) ops.push({ op: 'actualizar', id: tid, cambios: { items } });
@@ -53,9 +73,22 @@ export function crearNormalizador(cwd = '') {
           const h = herramientas.get(cadena(c.tool_use_id));
           if (h) {
             const salida = typeof c.content === 'string' ? c.content : Array.isArray(c.content) ? c.content.map(objeto).map(p => cadena(p.text)).join('\n') : '';
-            ops.push({ op: 'actualizar', id: h.id, cambios: { estado: c.is_error ? 'error' : 'ok', ...(h.terminal ? { terminal: { ...h.terminal, salida, codigo: codigoSalida(objeto((msg as unknown as Record<string, unknown>).tool_use_result), salida), duracionMs: Math.max(0, fechaMensaje(msg) - (h.terminal.inicio || fechaMensaje(msg))) } } : {}), detalle: c.is_error ? { clase: 'codigo', texto: recortar(salida) } : detalleHerramienta(h.nombre, h.entrada, salida) } });
+            const deFondo = h.terminal && !c.is_error ? enSegundoPlano(salida, objeto(h.entrada).run_in_background === true) : undefined;
+            if (deFondo) {
+              // Sigue viva: la salida llega después (servidor/fondo.ts la lee del archivo) y el final, con el aviso de la tarea
+              porTarea.set(deFondo.tarea, h.id);
+              ops.push({ op: 'actualizar', id: h.id, cambios: { estado: 'ok', detalle: detalleHerramienta(h.nombre, h.entrada, salida) } });
+              ponerTerminal(ops, h.id, { fondo: 'corriendo', tarea: deFondo.tarea, archivo: deFondo.archivo, salida: '' });
+              continue;
+            }
+            const final = h.terminal ? { ...(terminales.get(h.id) ?? h.terminal), fondo: undefined, salida, codigo: codigoSalida(objeto((msg as unknown as Record<string, unknown>).tool_use_result), salida), duracionMs: Math.max(0, fechaMensaje(msg) - (h.terminal.inicio || fechaMensaje(msg))) } : undefined;
+            if (final) terminales.set(h.id, final);
+            ops.push({ op: 'actualizar', id: h.id, cambios: { estado: c.is_error ? 'error' : 'ok', ...(final ? { terminal: final } : {}), detalle: c.is_error ? { clase: 'codigo', texto: recortar(salida) } : detalleHerramienta(h.nombre, h.entrada, salida) } });
           }
         }
+        // Avisos de shells de fondo que terminaron, sueltos o dentro de un recordatorio (también en el historial)
+        const textos = contenido.map(c => c.type === 'text' ? cadena(c.text) : c.type === 'tool_result' ? (typeof c.content === 'string' ? c.content : Array.isArray(c.content) ? c.content.map(objeto).map(p => cadena(p.text)).join('\n') : '') : '').join('\n');
+        if (textos.includes('<task-notification>')) for (const aviso of avisosTarea(textos)) terminarFondo(ops, { ...aviso, fecha: fechaMensaje(msg) });
         const crudo = msg as unknown as Record<string, unknown>;
         const sintetico = !!crudo.isSynthetic || !!crudo.isMeta || !!crudo.isCompactSummary;
         const limpio = limpiarUsuario(contenido.filter(c => c.type === 'text').map(c => cadena(c.text)).join('\n'));
@@ -72,9 +105,56 @@ export function crearNormalizador(cwd = '') {
       flujos.clear();
       agregar({ tipo: 'fin', id, duracionMs: msg.duration_ms, costoUsd: msg.total_cost_usd, turnos: msg.num_turns, error: msg.subtype !== 'success' ? textoError(msg.errors) : msg.is_error ? msg.result : undefined });
     }
+    if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'task_notification') {
+      const m = msg as unknown as { task_id: string; tool_use_id?: string; status: string; output_file?: string; summary?: string };
+      terminarFondo(ops, { tarea: m.task_id, herramienta: m.tool_use_id, fondo: fondoDe(m.status), codigo: codigoResumen(m.summary), archivo: m.output_file, fecha: Date.now() });
+    }
+    // La lista completa de tareas vivas: la shell que ya no está terminó, aunque se pierda su aviso
+    if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'background_tasks_changed') {
+      const vivas = new Set(((msg as unknown as { tasks?: { task_id: string }[] }).tasks || []).map(t => t.task_id));
+      for (const [tarea, id] of porTarea) if (!vivas.has(tarea) && terminales.get(id)?.fondo === 'corriendo') terminarFondo(ops, { tarea, fondo: 'terminado', fecha: Date.now() }, true);
+    }
     if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'compact_boundary') agregar({ tipo: 'sistema', id, texto: 'Se resumió la conversación para liberar contexto', nivel: 'info' });
     return ops;
-  } };
+  },
+  /** El proceso de Claude se cerró o arranca de nuevo: sus shells de fondo murieron con él */
+  cerrarFondos(): Op[] {
+    const ops: Op[] = [];
+    for (const [id, t] of terminales) if (t.fondo === 'corriendo') ponerTerminal(ops, id, { fondo: 'detenido' });
+    return ops;
+  },
+  /** Las shells de fondo que siguen vivas, para leer su salida mientras corren */
+  fondosVivos(): { id: string; archivo: string }[] {
+    return [...terminales].flatMap(([id, t]) => t.fondo === 'corriendo' && t.archivo ? [{ id, archivo: t.archivo }] : []);
+  },
+  terminal(id: string) { return terminales.get(id); },
+  /** La salida que se leyó del archivo de una shell de fondo */
+  ponerSalida(id: string, salida: string): Op[] { const ops: Op[] = []; ponerTerminal(ops, id, { salida }); return ops; } };
+}
+
+/** «Command running in background with ID: bqeyh7axg. Output is being written to: /tmp/…/tasks/bqeyh7axg.output. …» */
+export function enSegundoPlano(salida: string, pedido: boolean): { tarea: string; archivo?: string } | undefined {
+  // Sin run_in_background (lo mandaron al fondo a mitad de camino) el aviso tiene que ser todo el resultado,
+  // no un texto parecido dentro de la salida de un comando cualquiera
+  const m = (pedido ? /running in (?:the )?background with ID: ([\w-]+)/i : /^Command [^\n]*background with ID: ([\w-]+)/).exec(salida);
+  if (!m) return undefined;
+  return { tarea: m[1]!, archivo: /written to: (\/\S+?\.output)\b/.exec(salida)?.[1] };
+}
+
+function fondoDe(estado: string): Fondo {
+  return estado === 'completed' ? 'terminado' : estado === 'failed' ? 'fallido' : 'detenido';
+}
+function codigoResumen(resumen?: string): number | undefined {
+  const m = /exit code (-?\d+)/i.exec(resumen || '');
+  return m ? Number(m[1]) : undefined;
+}
+
+/** Los <task-notification> que Claude Code guarda en el historial cuando termina una tarea de fondo */
+export function avisosTarea(texto: string): { tarea?: string; herramienta?: string; fondo: Fondo; codigo?: number; archivo?: string }[] {
+  return [...texto.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)].map(([, cuerpo]) => {
+    const campo = (n: string) => new RegExp(`<${n}>([\\s\\S]*?)</${n}>`).exec(cuerpo!)?.[1]?.trim() || undefined;
+    return { tarea: campo('task-id'), herramienta: campo('tool-use-id'), fondo: fondoDe(campo('status') || ''), codigo: codigoResumen(campo('summary')), archivo: campo('output-file') };
+  }).filter(a => a.tarea || a.herramienta);
 }
 
 /** Quita lo que Claude Code agrega al mensaje del usuario (recordatorios, avisos de tareas, salida de comandos locales) */

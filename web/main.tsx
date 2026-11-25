@@ -1,4 +1,4 @@
-import { Terminales, comandosTerminal } from './componentes/Terminales.tsx';
+import { Terminales, comandosTerminal, corriendoTerminal } from './componentes/Terminales.tsx';
 import { render } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks';
 import './estilo.css';
@@ -100,14 +100,21 @@ function guardarArchivo(nombre: string, texto: string) {
 }
 const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
 
-/** Ancho de la barra de la izquierda (en px); se cambia arrastrando su borde derecho */
+/** Ancho de la barra de la izquierda (en px); se achica arrastrando su borde derecho, pero no crece más que esto */
 const BARRA = 272;
-function leerBarra(): number { try { const n = Number(localStorage.getItem('lyra-barra')); return n >= 200 && n <= 520 ? n : BARRA; } catch { return BARRA; } }
+function leerBarra(): number { try { const n = Number(localStorage.getItem('lyra-barra')); return n >= 200 && n <= BARRA ? n : BARRA; } catch { return BARRA; } }
 
 /** Ancho del panel derecho: el mismo para todas las pestañas e igual al de la barra izquierda. Si arrastras el borde, esa pestaña guarda el suyo
  *  hasta el botón «tamaños de siempre» (o doble clic en el borde) */
 const PANEL = BARRA;
 type Anchos = Partial<Record<Exclude<Panel, null>, number>>;
+/** El panel crece mientras el nombre de la sesión se siga viendo entero en la cabecera (a uno muy largo se le dejan 380 px).
+ *  Se mide con el panel en `actual` px: lo que sobra al lado del título es lo que todavía puede crecer */
+function topePanel(actual: number): number {
+  const caja = document.querySelector<HTMLElement>('.lectura-titulos'), titulo = document.querySelector<HTMLElement>('.lectura-titulo');
+  if (!caja || !titulo) return Math.round(window.innerWidth * 0.6);
+  return Math.max(PANEL, Math.round(actual + caja.clientWidth - Math.min(titulo.scrollWidth, 380)));
+}
 function leerAnchos(): Anchos {
   try { const a = JSON.parse(localStorage.getItem('lyra-anchos-propios') || '{}'); return a && typeof a === 'object' ? a : {}; } catch { return {}; }
 }
@@ -193,14 +200,23 @@ function App() {
   const exportar = () => doc ? aMarkdown(doc.bloques, titulo, quien, cwd) : '';
   const objetivo: Objetivo | undefined = agente ? { proveedor, titulo, agente: agente.id, sessionId: agente.sessionId, cwd, trabajando: agente.estado === 'trabajando' }
     : v?.tipo === 'sesion' ? { proveedor, titulo, sessionId: v.sessionId, cwd } : undefined;
-  const ancho = panel ? anchos[panel] ?? PANEL : 0;
+  // Un ancho guardado tampoco tapa el nombre: se vuelve a medir al cambiar de sesión, de título o de ventana
+  const [tope, setTope] = useState(Infinity);
+  const ancho = panel ? Math.min(anchos[panel] ?? PANEL, angosto ? Infinity : tope) : 0;
+  useLayoutEffect(() => {
+    if (!panel || angosto) return;
+    const medir = () => setTope(topePanel(ancho));
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, [panel, angosto, titulo, ancho, !!v]);
 
   function arrastrarBorde(e: PointerEvent) {
     if (!panel || angosto) return;
     e.preventDefault();
-    const inicio = e.clientX, base = anchos[panel] ?? PANEL, p = panel;
+    const inicio = e.clientX, base = anchos[panel] ?? PANEL, p = panel, tope = Math.min(topePanel(ancho), window.innerWidth * 0.6);
     let ultimo = base;
-    const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + inicio - ev.clientX, 200), window.innerWidth * 0.6)); setAnchos(a => ({ ...a, [p]: ultimo })); };
+    const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + inicio - ev.clientX, 200), tope)); setAnchos(a => ({ ...a, [p]: ultimo })); };
     const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); setAnchos(a => { guardarLocal('lyra-anchos-propios', a); return a; }); document.body.classList.remove('arrastrando'); };
     document.body.classList.add('arrastrando');
     window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
@@ -219,7 +235,7 @@ function App() {
     e.preventDefault();
     const inicio = e.clientX, base = anchoBarra;
     let ultimo = base;
-    const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + ev.clientX - inicio, 200), Math.min(520, window.innerWidth * 0.4))); setAnchoBarra(ultimo); };
+    const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + ev.clientX - inicio, 200), BARRA)); setAnchoBarra(ultimo); };
     const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); guardarLocal('lyra-barra', ultimo); document.body.classList.remove('arrastrando'); };
     document.body.classList.add('arrastrando');
     window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
@@ -231,7 +247,7 @@ function App() {
       <BotonIcono icono="visor" titulo={hayNuevos ? 'Visor: hay archivos nuevos (Ctrl+O)' : 'Visor de archivos e imágenes (Ctrl+O)'} activo={panel === 'visor'} data-nuevo={hayNuevos ? 'true' : undefined} onClick={() => alternar('visor')} />
       <BotonIcono icono="rama" titulo="GitHub: cambios, PR, pruebas e issues de esta carpeta (Ctrl+G)" activo={panel === 'github'} onClick={() => alternar('github')} />
       <button type="button" class="icono-boton terminales-pestana" aria-label="Terminales" aria-pressed={panel === 'terminales'} onClick={() => alternar('terminales')}>
-        <Icono nombre="terminal" />{comandosTerminal(doc?.bloques || []).filter(b => b.estado === 'corriendo').length > 0 && <span class="terminales-contador">{comandosTerminal(doc?.bloques || []).filter(b => b.estado === 'corriendo').length}</span>}
+        <Icono nombre="terminal" />{(() => { const n = comandosTerminal(doc?.bloques || []).filter(corriendoTerminal).length; return n > 0 && <span class="terminales-contador">{n}</span>; })()}
       </button>
       <BotonIcono icono="memoria" titulo="Memorias de Claude, Codex y el local (Ctrl+M)" activo={panel === 'memorias'} onClick={() => alternar('memorias')} />
     </div>

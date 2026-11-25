@@ -1191,6 +1191,11 @@ details.cuadro[open] > .cuadro-cabecera .carpeta-flecha::before, .cuadro[data-ab
 .terminal-comando[data-estado="ok"] .terminal-icono { color: var(--lima); }
 .terminal-comando[data-estado="error"] .terminal-icono { color: var(--rojo); }
 .terminal-comando[data-estado="corriendo"] .terminal-icono { color: var(--amarillo); }
+.terminal-comando[data-estado="detenido"] .terminal-icono { color: var(--tenue); }
+/* En segundo plano: borde azul (más fuerte mientras sigue viva) */
+.terminal-comando[data-fondo] { border-color: rgba(156, 191, 222, .7); }
+.terminal-comando[data-fondo="corriendo"] { border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-suave); }
+.terminal-comando[data-fondo="corriendo"] .terminal-icono { color: var(--azul); }
 .terminal-titulo { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .terminal-duracion { flex: none; font: .72rem var(--mono); color: var(--tenue); }
 .terminal-detalle { padding: .1rem .45rem .5rem; display: flex; flex-direction: column; gap: .4rem; }

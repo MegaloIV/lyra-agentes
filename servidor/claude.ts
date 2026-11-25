@@ -10,6 +10,7 @@ import type { Bloque, Comando, Limite, Modelo, PermissionMode, Sesion, Solicitud
 import { aplicarOps } from './protocolo.ts';
 import { crearNormalizador } from './normalizar.ts';
 import { Cola } from './cola.ts';
+import { leerFinal, SeguidorFondo } from './fondo.ts';
 import { cadena } from './resumenes.ts';
 import type { Agente, Contexto, Motor } from './motor.ts';
 import { anotarLocal, entornoLocal, HERRAMIENTAS_LOCALES, asegurarOllama, modelosLocales } from './local.ts';
@@ -23,6 +24,12 @@ export async function historialClaude(): Promise<Sesion[]> {
 export async function cargarClaude(sessionId: string, cwd: string) {
   const n = crearNormalizador(cwd); let bloques: Bloque[] = [];
   for (const m of await getSessionMessages(sessionId, { dir: cwd })) bloques = aplicarOps(bloques, n.procesar(m));
+  // Sin el proceso que las lanzó, las shells de fondo ya no corren; la salida que dejaron se lee del archivo si sigue ahí
+  bloques = aplicarOps(bloques, n.cerrarFondos());
+  for (const b of bloques) if (b.tipo === 'herramienta' && b.terminal?.tarea && b.terminal.archivo && !b.terminal.salida) {
+    const r = await leerFinal(b.terminal.archivo);
+    if (r?.texto) bloques = aplicarOps(bloques, n.ponerSalida(b.id, r.texto));
+  }
   return { bloques, normalizador: n };
 }
 
@@ -91,12 +98,21 @@ export class MotorClaude implements Motor {
   private a: Agente;
   /** `local`: el mismo Claude Code, pero con un modelo de Ollama (servidor/local.ts) */
   private local: boolean;
+  private fondo: SeguidorFondo;
   constructor(ctx: Contexto, a: Agente, normalizador?: ReturnType<typeof crearNormalizador>, local = false) {
-    this.ctx = ctx; this.a = a; this.local = local; this.normalizador = normalizador || crearNormalizador(a.cwd); }
+    this.ctx = ctx; this.a = a; this.local = local; this.normalizador = normalizador || crearNormalizador(a.cwd);
+    this.fondo = new SeguidorFondo(this.normalizador, ops => { if (!this.a.cerrado && ops.length) this.ctx.ops(this.a, ops); });
+  }
+
+  /** Las shells de fondo mueren con el proceso de Claude */
+  private cerrarFondos() {
+    const ops = this.normalizador.cerrarFondos();
+    if (ops.length) { this.ctx.ops(this.a, ops); this.fondo.revisar(ops); }
+  }
 
   iniciar() {
     const a = this.a;
-    this.consulta?.close(); this.abortar.abort(); this.cola.cerrar();
+    this.consulta?.close(); this.abortar.abort(); this.cola.cerrar(); this.cerrarFondos();
     this.abortar = new AbortController(); this.cola = new Cola(); a.cerrado = false;
     this.ctx.estado(a, 'iniciando');
     if (this.local) { void this.iniciarLocal(); return; }
@@ -139,7 +155,8 @@ export class MotorClaude implements Motor {
           ctx.ops(a, ids.map(id => ({ op: 'actualizar', id, cambios: { enCola: false } })));
           if (!a.pendientes.size && a.estado !== 'trabajando') ctx.estado(a, 'trabajando');
         }
-        ctx.ops(a, this.normalizador.procesar(msg));
+        const ops = this.normalizador.procesar(msg);
+        ctx.ops(a, ops); this.fondo.revisar(ops);
         if (msg.type === 'result') {
           ctx.estado(a, a.pendientes.size ? 'esperando' : 'listo');
           // Título que Claude Code genera para la sesión (el mismo del historial)
@@ -148,6 +165,7 @@ export class MotorClaude implements Motor {
           if (!this.local && typeof consulta.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET === 'function') void usoDe(consulta).then(u => alUsarClaude(limiteDe(u))).catch(() => {});
         }
       }
+      if (!a.cerrado && this.consulta === consulta) this.cerrarFondos();
       if (!a.cerrado && this.consulta === consulta) ctx.fallo(a, new Error(`El proceso de ${this.local ? 'el agente local' : 'Claude'} terminó. Puedes reanudar la sesión.`));
     } catch (e) { if (!a.cerrado && this.consulta === consulta) ctx.fallo(a, e); }
   }
@@ -187,5 +205,5 @@ export class MotorClaude implements Motor {
   }
   async esfuerzo(e?: string) { if (this.local) return; await this.consulta?.applyFlagSettings({ effortLevel: (e ?? null) as EffortLevel | null }); this.a.esfuerzo = e; }
   async comandos(): Promise<Comando[]> { return (await this.consulta?.supportedCommands() || []).map(c => ({ nombre: c.name, descripcion: c.description })); }
-  cerrar() { this.cola.cerrar(); this.abortar.abort(); this.consulta?.close(); }
+  cerrar() { this.fondo.parar(); this.cola.cerrar(); this.abortar.abort(); this.consulta?.close(); }
 }

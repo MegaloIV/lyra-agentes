@@ -4,7 +4,9 @@ export type Proveedor = 'claude' | 'codex' | 'local';
 /** Detalle listo para dibujar (Codex lo mandan armado) y texto del botón «Permitir siempre» */
 export type Solicitud = { id: string; agente: string; herramienta: string; entrada: Record<string, unknown>; titulo?: string; descripcion?: string; nombreCorto?: string; motivo?: string; rutaBloqueada?: string; haySugerencias: boolean; detalle?: Detalle; etiquetaSiempre?: string };
 export type Detalle = { clase: 'codigo'; lenguaje?: string; texto: string } | { clase: 'diff'; ruta: string; lineas: { tipo: '+' | '-' | ' '; texto: string }[] } | { clase: 'md'; texto: string };
-export type Terminal = { comando: string; descripcion?: string; carpeta?: string; salida?: string; codigo?: number; inicio?: number; duracionMs?: number };
+/** `fondo`: la shell quedó en segundo plano (run_in_background o Ctrl+B) y sigue viva o ya terminó; `tarea` y `archivo` son su id y el archivo de su salida */
+export type Fondo = 'corriendo' | 'terminado' | 'fallido' | 'detenido';
+export type Terminal = { comando: string; descripcion?: string; carpeta?: string; salida?: string; codigo?: number; inicio?: number; duracionMs?: number; fondo?: Fondo; tarea?: string; archivo?: string };
 export type Bloque =
   | { tipo: 'usuario'; id: string; md: string; fecha: number; enCola?: boolean }
   | { tipo: 'texto'; id: string; md: string; enCurso: boolean; padre?: string }
