@@ -118,7 +118,7 @@ function Fila({ s, onElegir, enProyecto = false }: { s: Sesion; onElegir: () => 
   );
 }
 
-export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void; onBorde: (e: PointerEvent) => void; onBordeDoble: () => void }) {
+export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble, onTamanos }: { abierta: boolean; onNuevo: () => void; onCerrarCajon: () => void; onBorde: (e: PointerEvent) => void; onBordeDoble: () => void; onTamanos: () => void }) {
   const [filtro, setFiltro] = useState<Proveedor | ''>('');
   const [busqueda, setBusqueda] = useState('');
   const [plegado, setPlegado] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem(PLEGADO) || '{}'); } catch { return {}; } });
@@ -146,6 +146,8 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble }
     }
   }
   const hay = new Set(estado.historial.map(s => s.proveedor));
+  // Siempre un punto por proveedor (Claude, Codex, Gemini y el local), aunque todavía no tenga conversaciones
+  const filtrables = PROVEEDORES;
   const proyectos = [...porProyecto.entries()];
   const abierto = (cwd: string, i: number) => !!q || (plegado[cwd] ?? i < ABIERTAS_DE_ENTRADA);
   const alternar = (cwd: string, i: number) => { const n = { ...plegado, [cwd]: !abierto(cwd, i) }; setPlegado(n); guardarLocal(PLEGADO, n); };
@@ -156,14 +158,15 @@ export function Barra({ abierta, onNuevo, onCerrarCajon, onBorde, onBordeDoble }
       <div class="barra-borde" onPointerDown={onBorde} onDblClick={onBordeDoble} title="Arrastra para cambiar el ancho (doble clic: el de siempre)" />
       <header class="agentes-cabecera">
         <span class="marca">Lyra</span>
+        <BotonIcono icono="tamanos" titulo="Volver a los tamaños de siempre (barra izquierda y paneles de la derecha)" onClick={onTamanos} />
         <BotonIcono icono="carpetaNueva" titulo="Nueva carpeta" onClick={() => { const id = crearCarpeta('Nueva carpeta'); estado.editando = `carpeta:${id}`; avisar(); }} />
         <BotonIcono icono="nuevo" titulo="Agente nuevo (Alt+N)" clase="icono-boton-lima" aria-current={v === null ? 'true' : undefined} onClick={onNuevo} />
       </header>
       <div class="agentes-desplazable">
       <div class="buscador">
         <input type="search" class="buscador-campo" placeholder="Buscar…" value={busqueda} onInput={e => setBusqueda((e.currentTarget as HTMLInputElement).value)} />
-        {hay.size > 1 && PROVEEDORES.filter(p => hay.has(p.id)).map(p => (
-          <button type="button" key={p.id} class="buscador-proveedor" data-proveedor={p.id} aria-pressed={filtro === p.id} title={`Solo ${p.nombre}`} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}><span class="proveedor-punto" /></button>
+        {filtrables.length > 1 && filtrables.map(p => (
+          <button type="button" key={p.id} class="buscador-proveedor" data-proveedor={p.id} aria-pressed={filtro === p.id} title={`Solo ${p.nombre}${hay.has(p.id) ? '' : ' (todavía sin conversaciones)'}`} onClick={() => setFiltro(filtro === p.id ? '' : p.id)}><span class="proveedor-punto" /></button>
         ))}
       </div>
       {estado.historial.length > 0 && (

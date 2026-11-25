@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { instalado } from './motor.ts';
 import { entornoLimpio } from './abrir.ts';
+import { esMemoriaLegible } from './memorias.ts';
 
 const MAXIMO = 60 * 1024 * 1024;
 const TIPOS: Record<string, string> = {
@@ -48,7 +49,7 @@ export async function ubicar(ruta: string, cwd = ''): Promise<{ real: string; in
   const raiz = raices.find(x => real === x || real.startsWith(x + sep));
   if (!raiz) throw new Error('Solo se muestran archivos de tu carpeta personal, /tmp o /mnt/shared.');
   const dentro = real.slice(raiz.length + 1);
-  if (dentro.split(sep).some(p => p.startsWith('.')) && !PERMITIDAS.some(p => dentro.startsWith(p + sep)))
+  if (dentro.split(sep).some(p => p.startsWith('.')) && !PERMITIDAS.some(p => dentro.startsWith(p + sep)) && !(raiz === casa && esMemoriaLegible(dentro)))
     throw new Error('No se muestran archivos de carpetas ocultas.');
   const info = await stat(real);
   if (!info.isFile()) throw new Error('No es un archivo.');

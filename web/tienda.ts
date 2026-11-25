@@ -1,13 +1,13 @@
 // Estado de la interfaz y conexión con el servidor. Un solo objeto mutable; los componentes se
 // suscriben y se vuelven a dibujar como máximo una vez por frame.
-import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub } from '@protocolo';
+import type { Bloque, ClienteMensaje, ServidorMensaje, ResumenAgente, Sesion, Comando, InfoProveedor, Limite, Proveedor, Grupos, PermissionMode, EstadoGit, InfoGithub, MemoriasProveedor } from '@protocolo';
 import { aplicarOps } from '@protocolo';
 
 /** `null`: un agente nuevo, todavía sin crear (se crea al mandar el primer mensaje) */
 export type Vista = { tipo: 'agente'; id: string } | { tipo: 'sesion'; sessionId: string; cwd: string; proveedor?: Proveedor } | null;
 /** Con qué se crea el próximo agente; se recuerda entre sesiones */
 export type Borrador = { proveedor: Proveedor; modelo: string; esfuerzo: string; modo: PermissionMode; cwd: string };
-export type Panel = 'indice' | 'visor' | 'github' | null;
+export type Panel = 'indice' | 'visor' | 'github' | 'memorias' | null;
 
 function leerLocal<T>(clave: string, defecto: T): T { try { const v = localStorage.getItem(clave); return v ? { ...defecto, ...JSON.parse(v) } as T : defecto; } catch { return defecto; } }
 export function guardarLocal(clave: string, valor: unknown) { try { localStorage.setItem(clave, JSON.stringify(valor)); } catch {} }
@@ -47,6 +47,8 @@ export const estado = {
   gitDiff: null as { cwd: string; clave: string; texto?: string; error?: string } | null,
   /** La prueba cuyo registro se está trayendo («run:job») */
   pidiendoRegistro: '',
+  /** Pestaña Memorias, por carpeta */
+  memorias: new Map<string, { proveedores?: MemoriasProveedor[]; error?: string; pidiendo?: boolean }>(),
 };
 
 const oyentes = new Set<() => void>();
@@ -119,6 +121,13 @@ export function explorar(ruta: string) { estado.explorado = null; enviar({ t: 'e
 export const claveArchivo = (ruta: string, cwd = '') => `${cwd}\0${ruta}`;
 /** Manda un archivo a la papelera del escritorio (se recupera desde el gestor de archivos) */
 export function borrarArchivo(ruta: string, cwd: string, id?: string) { enviar({ t: 'borrarArchivo', ruta, cwd, id }); }
+
+/** Busca las memorias de cada proveedor para esta carpeta */
+export function pedirMemorias(cwd: string) {
+  if (!cwd) return;
+  estado.memorias.set(cwd, { ...estado.memorias.get(cwd), pidiendo: true }); avisar();
+  enviar({ t: 'memorias', cwd });
+}
 
 /** Lee git de la carpeta; con `red`, también GitHub (PR, pruebas, issues) */
 export function pedirGit(cwd: string, red: boolean) {
@@ -254,6 +263,7 @@ function recibir(m: ServidorMensaje) {
       if (estado.visor?.ruta === m.ruta && estado.visor.cwd === (m.cwd || '')) estado.visor = null;
       break;
     }
+    case 'memorias': estado.memorias.set(m.cwd, { proveedores: m.proveedores, error: m.error, pidiendo: false }); break;
     case 'git': {
       const i = estado.git.get(m.cwd) || {};
       estado.git.set(m.cwd, { ...i, git: m.git, error: m.error, pidiendoRed: m.error ? false : i.pidiendoRed });

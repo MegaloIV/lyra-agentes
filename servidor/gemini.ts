@@ -1,6 +1,6 @@
 // Gemini CLI por ACP (Agent Client Protocol, `gemini --acp`). Un proceso por agente.
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -29,8 +29,14 @@ const REGISTRO = join(DIR_ESTADO, 'gemini-sesiones.json');
 
 // ── Catálogo e historial ──────────────────────────────────────────────────────
 /** Inició sesión con Google (o tiene clave) si quedaron credenciales guardadas */
+/** Clave de API de AI Studio: en el entorno o en ~/.gemini/.env (Gemini CLI lee ese archivo solo) */
+export function geminiConClave(): boolean {
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return true;
+  try { return /^\s*(export\s+)?GEMINI_API_KEY\s*=\s*\S/m.test(readFileSync(join(homedir(), '.gemini/.env'), 'utf8')); } catch { return false; }
+}
+/** Solo cuenta la clave: Google ya no acepta Gemini CLI con cuentas personales, aunque deje guardada la sesión */
 export function geminiConSesion(): boolean {
-  return existsSync(join(homedir(), '.gemini/oauth_creds.json')) || !!process.env.GEMINI_API_KEY || !!process.env.GOOGLE_API_KEY;
+  return geminiConClave();
 }
 
 function listarModelos(): Promise<Modelo[]> {
@@ -149,9 +155,9 @@ async function abrirSesion(c: ClienteRpc, cwd: string, cargar?: string): Promise
   await c.pedir('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false } });
   const pedir = () => cargar ? c.pedir<P>('session/load', { sessionId: cargar, cwd, mcpServers: [] }) : c.pedir<P>('session/new', { cwd, mcpServers: [] });
   try { return await pedir(); } catch (e) {
-    if (!geminiConSesion()) throw new Error('Gemini todavía no tiene tu sesión de Google. Pulsa «Iniciar sesión en Gemini» en el diálogo de nuevo agente.');
-    // Hay credenciales guardadas pero esta sesión no las tomó: se las indica y se reintenta
-    await c.pedir('authenticate', { methodId: 'oauth-personal' });
+    if (!geminiConSesion()) throw new Error('Gemini todavía no tiene tu clave de API. Pulsa «Poner la clave» en el diálogo de nuevo agente.');
+    // Hay credenciales guardadas pero esta sesión no las tomó: se le dice cuáles y se reintenta (la clave primero)
+    await c.pedir('authenticate', { methodId: geminiConClave() ? 'gemini-api-key' : 'oauth-personal' });
     void e; return await pedir();
   }
 }

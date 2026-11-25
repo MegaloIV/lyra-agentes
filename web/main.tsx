@@ -10,6 +10,7 @@ import { Redactor } from './componentes/Redactor.tsx';
 import { Reloj } from './componentes/Reloj.tsx';
 import { Visor, archivosDe } from './componentes/Visor.tsx';
 import { Github } from './componentes/Github.tsx';
+import { Memorias } from './componentes/Memorias.tsx';
 import type { Bloque } from '@protocolo';
 import { aMarkdown, haceCuanto, nombreProveedor, rutaCorta } from './util.ts';
 
@@ -97,8 +98,8 @@ function guardarArchivo(nombre: string, texto: string) {
 }
 const nombreArchivo = (titulo: string) => (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'conversacion') + '.md';
 
-/** Ancho del panel derecho, uno por pestaña (índice, visor, GitHub); se cambia arrastrando su borde */
-const ANCHOS = { indice: 240, visor: 460, github: 380 };
+/** Ancho del panel derecho, uno por pestaña (índice, visor, GitHub, memorias); se cambia arrastrando su borde */
+const ANCHOS = { indice: 240, visor: 460, github: 380, memorias: 340 };
 function leerAnchos(): Record<Exclude<Panel, null>, number> {
   try { return { ...ANCHOS, ...JSON.parse(localStorage.getItem('lyra-anchos') || '{}') }; } catch { return { ...ANCHOS }; }
 }
@@ -167,6 +168,7 @@ function App() {
       if (e.ctrlKey && k === 'i') { e.preventDefault(); alternar('indice'); return; }
       if (e.ctrlKey && k === 'o') { e.preventDefault(); alternar('visor'); return; }
       if (e.ctrlKey && k === 'g') { e.preventDefault(); alternar('github'); return; }
+      if (e.ctrlKey && k === 'm') { e.preventDefault(); alternar('memorias'); return; }
       if (e.key === 'F2' && estado.vista) { e.preventDefault(); estado.editando = 'cabecera'; avisar(); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -199,6 +201,14 @@ function App() {
     window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
   }
 
+  /** Botón de la barra: todo vuelve al ancho con que viene (barra y cada pestaña del panel) */
+  function tamanosDeSiempre() {
+    setAnchoBarra(BARRA); setAnchos({ ...ANCHOS });
+    try { localStorage.removeItem('lyra-barra'); localStorage.removeItem('lyra-anchos'); } catch { /* sin almacenamiento */ }
+    mostrarError('Tamaños de siempre', 'info');
+  }
+  function anchoDeSiempre(p: Exclude<Panel, null>) { setAnchos(a => { const n = { ...a, [p]: ANCHOS[p] }; guardarLocal('lyra-anchos', n); return n; }); }
+
   function arrastrarBarra(e: PointerEvent) {
     if (matchMedia('(max-width: 760px)').matches) return;
     e.preventDefault();
@@ -215,12 +225,13 @@ function App() {
       <BotonIcono icono="indice" titulo="Índice (Ctrl+I)" activo={panel === 'indice'} onClick={() => alternar('indice')} />
       <BotonIcono icono="visor" titulo={hayNuevos ? 'Visor: hay archivos nuevos (Ctrl+O)' : 'Visor de archivos e imágenes (Ctrl+O)'} activo={panel === 'visor'} data-nuevo={hayNuevos ? 'true' : undefined} onClick={() => alternar('visor')} />
       <BotonIcono icono="rama" titulo="GitHub: cambios, PR, pruebas e issues de esta carpeta (Ctrl+G)" activo={panel === 'github'} onClick={() => alternar('github')} />
+      <BotonIcono icono="memoria" titulo="Memorias de Claude, Codex, Gemini y el local (Ctrl+M)" activo={panel === 'memorias'} onClick={() => alternar('memorias')} />
     </div>
   );
 
   return (
     <div id="app" class="lyra" data-panel={v && panel ? panel : 'oculto'} style={{ '--panel': `${ancho}px`, '--barra': `${anchoBarra}px` } as Record<string, string>}>
-      <Barra abierta={cajon} onBorde={arrastrarBarra} onBordeDoble={() => { setAnchoBarra(BARRA); guardarLocal('lyra-barra', BARRA); }} onNuevo={() => { elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); }} onCerrarCajon={() => setCajon(false)} />
+      <Barra abierta={cajon} onBorde={arrastrarBarra} onBordeDoble={() => { setAnchoBarra(BARRA); guardarLocal('lyra-barra', BARRA); }} onTamanos={tamanosDeSiempre} onNuevo={() => { elegir(null); setCajon(false); setTimeout(() => window.dispatchEvent(new Event('lyra-enfocar')), 30); }} onCerrarCajon={() => setCajon(false)} />
       <main class="lectura">
         {estado.rechazado ? (
           <div class="vacio">
@@ -269,15 +280,16 @@ function App() {
       </main>
       {v && panel && (
         <aside class="panel" data-modo={panel}>
-          <div class="panel-borde" onPointerDown={arrastrarBorde} title="Arrastra para cambiar el ancho" />
+          <div class="panel-borde" onPointerDown={arrastrarBorde} onDblClick={() => anchoDeSiempre(panel)} title="Arrastra para cambiar el ancho (doble clic: el de siempre)" />
           <header class="panel-cabecera">
-            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : 'Visor'}</span>
+            <span class="panel-nombre">{panel === 'indice' ? 'En esta conversación' : panel === 'github' ? 'GitHub' : panel === 'memorias' ? 'Memorias' : 'Visor'}</span>
             <BotonIcono icono="cerrar" titulo="Cerrar el panel" onClick={() => ponerPanel(null)} />
           </header>
           <div class="panel-cuerpo">
             {panel === 'indice'
               ? <Indice entradas={entradas.lista} activo={entradas.activo} onIr={id => { setIrA(x => ({ id, vez: x.vez + 1 })); if (angosto) setPanelAngosto(null); }} />
               : panel === 'github' ? <Github cwd={cwd} turnos={turnos} />
+              : panel === 'memorias' ? <Memorias cwd={cwd} proveedor={proveedor} />
               : <Visor bloques={doc?.bloques || []} cwd={cwd} />}
           </div>
         </aside>

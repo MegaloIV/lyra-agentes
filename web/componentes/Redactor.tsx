@@ -241,7 +241,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
         <div class="redactor-aviso redactor-aviso-suave">Corre en tu computadora: nada sale de ella, pero es más lento que los otros.</div>
       )}
       {nuevo && datosNuevo?.id === 'gemini' && datosNuevo.instalado && !datosNuevo.sesion && (
-        <div class="redactor-aviso">Gemini todavía no tiene tu cuenta de Google. <button type="button" class="enlace" onClick={() => enviar({ t: 'abrir', con: 'loginGemini' })}>Iniciar sesión</button></div>
+        <div class="redactor-aviso">Gemini necesita una clave de API de Google AI Studio (es gratis). <button type="button" class="enlace" onClick={() => enviar({ t: 'abrir', con: 'loginGemini' })}>Poner la clave</button></div>
       )}
       {nuevo && cuota && (cuota.agotada || cuota.usado >= 80) && (
         <div class="redactor-aviso" data-nivel={cuota.agotada ? 'error' : 'info'}>{cuota.agotada ? 'Se acabó tu cuota de Codex' : `Usaste el ${cuota.usado} % de tu cuota de Codex`}{cuota.renueva ? `; vuelve ${horaDe(cuota.renueva)}.` : '.'}</div>

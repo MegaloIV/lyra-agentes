@@ -3,6 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { instalado } from './motor.ts';
 
 /** El entorno de una app abierta desde el escritorio: el shell de inicio del usuario y nada de la terminal
@@ -76,8 +77,8 @@ export async function abrirCon(con: 'terminal' | 'carpeta' | 'carpetaAparte' | '
     case 'carpeta': return lanzar('xdg-open', [cwd], cwd);
     case 'carpetaAparte': void carpetaAparte(cwd).catch(() => {}); return;
     case 'loginGemini':
-      // Gemini CLI interactivo: la primera vez pregunta cómo iniciar sesión (elegir «Sign in with Google»)
-      return abrirTerminal(homedir(), ['gemini']);
+      // Ya no se puede con la cuenta de Google: una terminal guía para pegar la clave de AI Studio (la pega el usuario)
+      return abrirTerminal(homedir(), [fileURLToPath(new URL('../bin/gemini-clave', import.meta.url))]);
   }
 }
 

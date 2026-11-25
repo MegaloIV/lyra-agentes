@@ -7,6 +7,7 @@ Una ventana para trabajar con varios agentes de programación a la vez —**Clau
 - **Sin diálogos:** el agente nuevo empieza al escribir. El proveedor, el modelo, el esfuerzo, los permisos y la carpeta son chips en la misma caja de texto, y se pueden cambiar en cualquier momento (Shift+Tab cambia los permisos, como en la terminal). El chip de la carpeta tiene sus carpetas recientes y un explorador para subir y bajar de nivel en el mismo menú, sin abrir otra ventana.
 - **Límites de uso a la vista:** abajo en la barra, cuánto usaste de Claude y de Codex (la ventana de 5 horas y la semanal), con la hora en que se renueva cada una. Se actualiza solo y al tocar «Uso».
 - **Permisos y preguntas en línea:** aprobar, rechazar con un motivo o responder sin salir del documento.
+- **Memorias al costado:** lo que recuerda o lee siempre cada agente (Claude, Codex, Gemini y el local) para la carpeta de la conversación, lo general y, en Claude, la memoria de los otros proyectos. Tocar un archivo lo abre en el visor.
 - **GitHub al costado:** la rama de la carpeta del agente, los cambios sin commit (con su diff), los commits recientes, el PR de la rama con sus pruebas (CI) y los issues abiertos. Si una prueba falla, «Pasarle el error» pone su registro en la caja; cada issue tiene un botón para que lo resuelva el agente. Los botones solo escriben el encargo en la caja: tú decides si lo mandas.
 - **Visor al costado:** muestra Markdown, imágenes, video y audio, PDF, Word, presentaciones y hojas de cálculo, sin abrir otra app. «Abrir con…» ofrece las apps de tu escritorio que abren ese archivo, y la papelera (dos clics) lo manda a la papelera del escritorio, de donde se recupera.
 - **Ventana propia:** GTK4 + WebKitGTK (unos 300 MB), no un navegador. También se puede usar desde un navegador.
@@ -21,7 +22,7 @@ Todo corre en tu computadora: un servidor local (127.0.0.1) maneja a los agentes
 - Al menos uno de estos, con tu sesión iniciada:
   - **Claude Code** (`claude`): viene con el Agent SDK de Anthropic.
   - **Codex** (`codex`): se usa con `codex app-server`.
-  - **Gemini CLI** (`gemini`): se usa con `gemini --acp`.
+  - **Gemini CLI** (`gemini`): se usa con `gemini --acp`. Google ya no deja entrar con una cuenta personal: necesita una clave de API de Google AI Studio (gratis). «Poner la clave», en Lyra, abre una terminal para pegarla; queda en `~/.gemini/.env`.
   - **Ollama** con un modelo que sepa usar herramientas (ver más abajo).
 - Opcional: **GitHub CLI** (`gh`) con `gh auth login`, para ver PRs, pruebas e issues en la pestaña GitHub. Sin él se ve todo lo de git.
 - Opcional: **LibreOffice**, para ver presentaciones, hojas de cálculo y documentos `.doc` en el visor. Los `.docx` y los PDF se ven sin él.
@@ -48,9 +49,9 @@ lyra-agentes --log       # muestra el registro del servidor
 lyra-agentes --instalar  # la agrega al menú de aplicaciones
 ```
 
-**Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. Gemini CLI no informa su cuota a otras apps, así que su fila solo dice si tiene sesión. El agente local no tiene límites.
+**Límites de uso:** los de Claude son los del plan de claude.ai (los mismos de `/usage`); con una clave de API no hay. Los de Codex son los de tu cuenta de ChatGPT. Con clave de API, Google muestra el uso de Gemini solo en AI Studio, así que su fila solo dice si tiene clave. El agente local no tiene límites.
 
-Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub y Shift+Tab siguiente modo de permisos.
+Atajos: Alt+N agente nuevo, Ctrl+K ir a la caja, Ctrl+I índice, Ctrl+O visor, Ctrl+G GitHub, Ctrl+M memorias y Shift+Tab siguiente modo de permisos.
 
 ## Agente local (Ollama)
 

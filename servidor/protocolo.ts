@@ -24,6 +24,10 @@ export type Modelo = { valor: string | null; nombre: string; descripcion?: strin
 export type InfoProveedor = { id: Proveedor; nombre: string; instalado: boolean; sesion: boolean; modelos: Modelo[]; modos: { valor: PermissionMode; nombre: string }[]; cuota?: { usado: number; renueva?: number; agotada: boolean } };
 export type Comando = { nombre: string; descripcion: string };
 /** Una ventana de un límite de uso: `usado` en %, `renueva` en ms. `corta` es la de horas (5 h) y `larga` la semanal */
+/** Pestaña Memorias: un archivo, un grupo (del proyecto, general u otro proyecto) y lo de cada proveedor */
+export type ArchivoMemoria = { ruta: string; nombre: string; descripcion?: string; modificado: number; tamano: number };
+export type GrupoMemoria = { titulo: string; alcance: 'proyecto' | 'general' | 'otro'; archivos: ArchivoMemoria[] };
+export type MemoriasProveedor = { proveedor: Proveedor; grupos: GrupoMemoria[]; nota?: string };
 export type Ventana = { tipo: 'corta' | 'larga'; nombre: string; usado: number; renueva?: number };
 /** Cuánto le queda a cada proveedor; sin ventanas, `nota` dice por qué (sin sesión, no lo informa…) */
 export type Limite = { proveedor: Proveedor; plan?: string; ventanas: Ventana[]; nota?: string };
@@ -67,6 +71,7 @@ export type ClienteMensaje =
   | { t: 'guardarGrupos'; grupos: Grupos }
   /** Pestaña GitHub: el estado de git de `cwd` y, con `red`, también lo de GitHub */
   | { t: 'git'; cwd: string; red?: boolean }
+  | { t: 'memorias'; cwd: string }
   /** El diff de un archivo (`ruta`, relativa a la raíz del repo) o de un commit */
   | { t: 'gitDiff'; cwd: string; ruta?: string; commit?: string }
   /** El registro de una prueba que falló, para ponerlo en la caja */
@@ -95,6 +100,7 @@ export type ServidorMensaje =
   | { t: 'enfocar'; agente: string }
   | { t: 'grupos'; grupos: Grupos }
   | { t: 'git'; cwd: string; git?: EstadoGit; error?: string }
+  | { t: 'memorias'; cwd: string; proveedores?: MemoriasProveedor[]; error?: string }
   | { t: 'github'; cwd: string; github: InfoGithub }
   | { t: 'gitDiff'; cwd: string; clave: string; texto?: string; error?: string }
   | { t: 'registroPrueba'; cwd: string; texto: string; nombre?: string }

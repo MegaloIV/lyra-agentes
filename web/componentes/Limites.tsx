@@ -1,7 +1,7 @@
 // Abajo en la barra: cuánto usaste de cada proveedor, todos a la vez. Una fila por proveedor con la ventana corta
 // (5 h) y la larga (semana); el detalle (cuándo se renueva, otras ventanas) va en el globo de cada celda.
 import type { Limite, Ventana } from '@protocolo';
-import { estado, pedirLimites } from '../tienda.ts';
+import { enviar, estado, pedirLimites } from '../tienda.ts';
 import { haceCuanto, horaDe, nombreProveedor } from '../util.ts';
 
 const nivel = (u: number) => u >= 100 ? 'agotado' : u >= 80 ? 'alto' : undefined;
@@ -36,7 +36,9 @@ export function Limites() {
           <span class="limites-nombre" title={l.plan ? `Plan ${l.plan}` : undefined}>{nombreProveedor(l.proveedor)}</span>
           {l.ventanas.length
             ? <><Celda l={l} tipo="corta" /><Celda l={l} tipo="larga" /></>
-            : <span class="limites-nota">{l.nota || 'sin datos'}</span>}
+            : l.proveedor === 'gemini' && l.nota === 'sin clave'
+              ? <button type="button" class="limites-nota enlace" title="Abre una terminal para pegar tu clave de Google AI Studio" onClick={() => enviar({ t: 'abrir', con: 'loginGemini' })}>poner la clave</button>
+              : <span class="limites-nota" title={l.proveedor === 'gemini' ? 'Con clave de API, Google muestra el uso solo en aistudio.google.com' : undefined}>{l.nota || 'sin datos'}</span>}
         </div>
       ))}
     </footer>
