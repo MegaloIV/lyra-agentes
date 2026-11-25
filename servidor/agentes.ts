@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
-import type { Bloque, Op, PermissionMode, Proveedor, ResumenAgente, ServidorMensaje, Sesion } from './protocolo.ts';
+import type { Bloque, Op, PermissionMode, Progreso, Proveedor, ResumenAgente, ServidorMensaje, Sesion } from './protocolo.ts';
 import { aplicarOps } from './protocolo.ts';
 import type { Agente, Contexto, Respuesta } from './motor.ts';
 import { MotorClaude, cargarClaude, historialClaude, tituloClaude } from './claude.ts';
@@ -24,12 +24,22 @@ export class GestorAgentes implements Contexto {
   }
 
   resumenes(): ResumenAgente[] {
-    return [...this.agentes.values()].map(({ id, proveedor, sessionId, titulo, cwd, estado, modelo, esfuerzo, modo, sinLeer, ultimaActividad, contexto }) => ({ id, proveedor, sessionId, titulo, cwd, estado, modelo, esfuerzo, modo, sinLeer, ultimaActividad, contexto }));
+    return [...this.agentes.values()].map(({ id, proveedor, sessionId, titulo, cwd, estado, modelo, esfuerzo, modo, sinLeer, ultimaActividad, contexto, progreso }) => ({ id, proveedor, sessionId, titulo, cwd, estado, modelo, esfuerzo, modo, sinLeer, ultimaActividad, contexto, progreso }));
   }
-  barra() { this.emitir({ t: 'agentes', agentes: this.resumenes() }); }
+  private relojBarra?: ReturnType<typeof setTimeout>;
+  barra() { if (this.relojBarra) clearTimeout(this.relojBarra); this.relojBarra = undefined; this.emitir({ t: 'agentes', agentes: this.resumenes() }); }
+  progreso(a: Agente, tokens: number, fase?: Progreso['fase']) {
+    const p = a.progreso;
+    if (!p || p.fin || (p.tokens === tokens && (!fase || p.fase === fase))) return;
+    p.tokens = tokens; if (fase) p.fase = fase;
+    this.relojBarra ??= setTimeout(() => this.barra(), 500);
+  }
   ops(a: Agente, ops: Op[]) { if (!ops.length || a.cerrado) return; a.bloques = aplicarOps(a.bloques, ops); this.emitir({ t: 'ops', agente: a.id, ops }); }
   estado(a: Agente, estado: Agente['estado']) {
     const anterior = a.estado; a.estado = estado; a.ultimaActividad = Date.now();
+    // Un turno nuevo empieza a contar al ponerse a trabajar desde el reposo; al terminar queda quieto con lo último
+    if (estado === 'trabajando' && (!a.progreso || a.progreso.fin)) a.progreso = { inicio: Date.now(), tokens: 0, fase: 'pensando' };
+    if ((estado === 'listo' || estado === 'error' || estado === 'cerrado') && a.progreso && !a.progreso.fin) a.progreso.fin = Date.now();
     if (estado === 'listo' && !this.mirando(a.id)) a.sinLeer = true;
     this.barra();
     if (anterior !== estado && (estado === 'esperando' || estado === 'listo') && anterior !== 'iniciando') {

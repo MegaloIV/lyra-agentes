@@ -1,11 +1,14 @@
 import type { SDKMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Bloque, Fondo, Op, Terminal } from './protocolo.ts';
 import { cadena, objeto, resumir, detalleHerramienta, recortar } from './resumenes.ts';
+import { datosComando } from './comandos.ts';
 export function crearNormalizador(cwd = '') {
   let serie = 0, turno = 0;
   const vistos = new Set<string>(), herramientas = new Map<string, Extract<Bloque, { tipo: 'herramienta' }>>();
   const flujos = new Map<string, { mensaje: string; textos: Map<number, string> }>();
   const tareas = new Set<string>();
+  /** El último comando que escribió el usuario («/context»), para nombrar lo que muestre */
+  let ultimoComando = '';
   // Lo último de cada comando (para las shells de fondo, que cambian después del tool_result) y qué tarea es cada una
   const terminales = new Map<string, Terminal>(), porTarea = new Map<string, string>();
   const ponerTerminal = (ops: Op[], id: string, cambios: Partial<Terminal>, estado?: 'ok' | 'error') => {
@@ -46,6 +49,16 @@ export function crearNormalizador(cwd = '') {
     const id = msg.uuid || `mensaje-${++serie}`;
     if (msg.type === 'assistant' || msg.type === 'user') {
       const m = objeto(msg.message), contenido = typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : Array.isArray(m.content) ? m.content.map(objeto) : [];
+      const crudoMsg = msg as unknown as Record<string, unknown>;
+      // Lo que muestra un comando local (/context, /usage…): un mensaje sintético con su salida en texto
+      if (msg.type === 'assistant' && m.model === '<synthetic>' && typeof crudoMsg.local_command_source === 'string') {
+        const texto = contenido.filter(c => c.type === 'text').map(c => cadena(c.text)).join('\n').trim();
+        if (texto) {
+          const nombre = ultimoComando || 'comando', { datos, resto } = datosComando(nombre, texto, crudoMsg.usage_report);
+          agregar({ tipo: 'comando', id, nombre, texto, ...(datos ? { datos, resto } : {}) });
+        }
+        return ops;
+      }
       if (msg.type === 'assistant') {
         const flujo = flujos.get(canal), pendientes = [...(flujo?.textos.values() || [])];
         contenido.forEach((c, i) => {
@@ -95,6 +108,7 @@ export function crearNormalizador(cwd = '') {
         if (!padre && (crudo.isCompactSummary || limpio.tipo === 'resumen')) agregar({ tipo: 'sistema', id, texto: 'Se resumió la conversación para liberar contexto', nivel: 'info' });
         else if (!sintetico && !padre && limpio.tipo === 'usuario') {
           turno++;
+          ultimoComando = /^`?\/([\w:-]+)/.exec(limpio.texto)?.[1] || '';
           const fecha = typeof crudo.timestamp === 'string' ? Date.parse(crudo.timestamp) : 0;
           agregar({ tipo: 'usuario', id, md: limpio.texto, fecha: Number.isFinite(fecha) ? fecha : 0 });
         }
@@ -103,7 +117,8 @@ export function crearNormalizador(cwd = '') {
     if (msg.type === 'result') {
       for (const f of flujos.values()) for (const id of f.textos.values()) ops.push({ op: 'actualizar', id, cambios: { enCurso: false } });
       flujos.clear();
-      agregar({ tipo: 'fin', id, duracionMs: msg.duration_ms, costoUsd: msg.total_cost_usd, turnos: msg.num_turns, error: msg.subtype !== 'success' ? textoError(msg.errors) : msg.is_error ? msg.result : undefined });
+      const local = !!(msg as unknown as Record<string, unknown>).local_command, salida = msg.usage?.output_tokens;
+      agregar({ tipo: 'fin', id, duracionMs: local ? undefined : msg.duration_ms, costoUsd: msg.total_cost_usd, turnos: msg.num_turns, tokens: typeof salida === 'number' && salida > 0 ? salida : undefined, error: msg.subtype !== 'success' ? textoError(msg.errors) : msg.is_error ? msg.result : undefined });
     }
     if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'task_notification') {
       const m = msg as unknown as { task_id: string; tool_use_id?: string; status: string; output_file?: string; summary?: string };

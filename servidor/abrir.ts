@@ -27,12 +27,23 @@ function terminal(): string {
   if (!t) throw new Error('No encontré una terminal. Define LYRA_AGENTES_TERMINAL.');
   return t;
 }
-/** Abre la terminal en una carpeta, con un comando opcional */
-function abrirTerminal(cwd: string, comando: string[] = []) {
+/** Abre la terminal en una carpeta, con un comando opcional. En Hyprland sale flotando en el medio de la pantalla
+ *  (solo la que abre Lyra: las demás siguen en mosaico) */
+async function abrirTerminal(cwd: string, comando: string[] = []) {
   const t = terminal();
-  if (!comando.length) return lanzar(t, t === 'kitty' ? ['--directory', cwd] : [], cwd);
-  const args = t === 'kitty' || t === 'foot' ? comando : t === 'gnome-terminal' ? ['--', ...comando] : ['-e', ...comando];
+  const args = !comando.length ? (t === 'kitty' ? ['--directory', cwd] : []) : t === 'kitty' || t === 'foot' ? comando : t === 'gnome-terminal' ? ['--', ...comando] : ['-e', ...comando];
+  if (hyprland() && await flotando(t, args, cwd)) return;
   lanzar(t, args, cwd);
+}
+
+const hyprland = () => !!process.env.HYPRLAND_INSTANCE_SIGNATURE && instalado('hyprctl');
+/** 'a b' → «'a b'» para la línea de comandos que ejecuta Hyprland */
+const comillas = (x: string) => /^[\w@%+=:,./-]+$/.test(x) ? x : `'${x.replace(/'/g, `'\\''`)}'`;
+/** Lanza por Hyprland con reglas de ventana (flotante, 62 × 70 % de la pantalla, centrada), sin pasar por mosaico */
+async function flotando(cmd: string, args: string[], cwd: string): Promise<boolean> {
+  const linea = `cd ${comillas(cwd)} && exec ${[cmd, ...args].map(comillas).join(' ')}`;
+  const orden = `hl.dsp.exec_cmd(${JSON.stringify(linea)}, { float = true, size = "(monitor_w*0.62) (monitor_h*0.7)", center = true })`;
+  return (await salida('hyprctl', ['dispatch', orden])).trim() === 'ok';
 }
 
 function lanzar(comando: string, args: string[], cwd: string) {
@@ -53,7 +64,7 @@ const ventanas = async () => { try { return JSON.parse(await salida('hyprctl', [
 async function carpetaAparte(cwd: string) {
   const predeterminado = (await salida('xdg-mime', ['query', 'default', 'inode/directory'])).trim();
   const [cmd, ...args] = VENTANA_NUEVA[predeterminado] || ['xdg-open'];
-  const hypr = !!process.env.HYPRLAND_INSTANCE_SIGNATURE && instalado('hyprctl');
+  const hypr = hyprland();
   const antes = new Set(hypr ? (await ventanas()).map(v => v.address) : []);
   lanzar(cmd!, [...args, cwd], cwd);
   if (!hypr) return;

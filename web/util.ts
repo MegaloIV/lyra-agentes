@@ -58,6 +58,13 @@ export function costo(usd: number): string {
   return usd.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' US$';
 }
 
+/** Tokens como en la terminal: 842, 2.3k, 15k, 1.2M */
+export function tokensCortos(n: number): string { return n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${+(n / 1000).toFixed(1)}k` : String(n); }
+/** Tiempo transcurrido como en la terminal: 8s, 1m 23s, 1h 5m */
+export function cronometro(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m`;
+}
 export function miles(n: number): string { return n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n); }
 
 export const MODOS = [
@@ -141,6 +148,7 @@ export function aMarkdown(bloques: Bloque[], titulo: string, quien: string, cwd:
       case 'plan': salida.push('', '**Plan propuesto**', '', b.md, ''); break;
       case 'sistema': salida.push('', `> ${b.texto}`, ''); break;
       case 'fin': if (b.error) salida.push('', `> ${b.error}`, ''); break;
+      case 'comando': salida.push('', '```', b.texto, '```', ''); break;
     }
   }
   return salida.join('\n').replace(/\n{3,}/g, '\n\n');

@@ -16,11 +16,20 @@ export type Bloque =
   | { tipo: 'permiso'; id: string; solicitud: Solicitud; estado: 'pendiente' | 'permitido' | 'rechazado' | 'cancelado' }
   | { tipo: 'pregunta'; id: string; solicitud: Solicitud; estado: 'pendiente' | 'respondida' | 'cancelada'; respuestas?: Record<string, string> }
   | { tipo: 'plan'; id: string; solicitud: Solicitud; md: string; estado: 'pendiente' | 'aprobado' | 'rechazado' }
-  | { tipo: 'fin'; id: string; duracionMs?: number; costoUsd?: number; turnos?: number; error?: string }
+  | { tipo: 'fin'; id: string; duracionMs?: number; costoUsd?: number; turnos?: number; tokens?: number; error?: string }
+    /** Lo que mostró un comando de Claude Code (/context, /usage, /cost…): `nombre` sin la barra; `datos`, lo que se pudo leer
+   *  ya armado, y `resto`, lo que queda del texto para mostrarlo debajo */
+  | { tipo: 'comando'; id: string; nombre: string; texto: string; datos?: DatosComando; resto?: string }
   | { tipo: 'sistema'; id: string; texto: string; nivel: 'info' | 'error' };
+/** /context: cada categoría con sus tokens; /usage: cada límite con su porcentaje y cuándo se renueva */
+export type DatosComando =
+  | { clase: 'contexto'; modelo?: string; usados: number; total: number; categorias: { nombre: string; tokens: number; tipo: 'usado' | 'libre' | 'reserva' | 'diferido' }[] }
+  | { clase: 'uso'; limites: { nombre: string; usado: number; renueva?: number; renuevaTexto?: string; activo?: boolean }[] };
+/** El turno en curso (o el último): desde cuándo, cuántos tokens escribió (estimados mientras llegan) y qué está haciendo */
+export type Progreso = { inicio: number; tokens: number; fase: 'pensando' | 'escribiendo' | 'herramienta'; fin?: number };
 export type Cambios = Partial<Bloque extends infer B ? B extends Bloque ? Omit<B, 'id' | 'tipo'> : never : never>;
 export type Op = { op: 'agregar'; bloque: Bloque } | { op: 'actualizar'; id: string; cambios: Cambios } | { op: 'delta'; id: string; md: string };
-export type ResumenAgente = { id: string; proveedor: Proveedor; sessionId?: string; titulo: string; cwd: string; estado: 'iniciando' | 'trabajando' | 'esperando' | 'listo' | 'error' | 'cerrado'; modelo?: string; esfuerzo?: string; modo: PermissionMode; sinLeer: boolean; ultimaActividad: number; contexto?: { usados: number; total: number } };
+export type ResumenAgente = { id: string; proveedor: Proveedor; sessionId?: string; titulo: string; cwd: string; estado: 'iniciando' | 'trabajando' | 'esperando' | 'listo' | 'error' | 'cerrado'; modelo?: string; esfuerzo?: string; modo: PermissionMode; sinLeer: boolean; ultimaActividad: number; contexto?: { usados: number; total: number }; progreso?: Progreso };
 export type Sesion = { proveedor: Proveedor; sessionId: string; titulo: string; cwd: string; modificado: number; rama?: string };
 export type Modelo = { valor: string | null; nombre: string; descripcion?: string; esfuerzos?: string[]; esfuerzoDefecto?: string };
 /** Lo que se puede elegir de cada proveedor. `cuota`: cuánto queda (Codex) */
@@ -56,6 +65,8 @@ export type Consola = { id: string; cwd: string; titulo: string; numero: number;
 export type Bateria = { nivel: number; estado: 'cargando' | 'descargando' | 'llena' | 'enchufada' };
 export type ClienteMensaje =
   | { t: 'hola' | 'historial' }
+  /** La ventana dejó de mirar una conversación del historial (ya no hace falta seguirla) */
+  | { t: 'soltar' }
   /** Las subcarpetas de `ruta`, para el explorador del chip «carpeta» */
   | { t: 'explorar'; ruta: string }
   | { t: 'crear'; cwd: string; proveedor?: Proveedor; modelo?: string; esfuerzo?: string; modo?: PermissionMode; prompt?: string }

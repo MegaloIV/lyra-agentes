@@ -7,7 +7,7 @@ export function validarMensaje(valor: unknown): ClienteMensaje {
   const m = objeto(valor), texto = (k: string, opcional = false) => opcional && m[k] === undefined || typeof m[k] === 'string' && (m[k] as string).length <= 200000;
   let valido = false;
   switch (m.t) {
-    case 'hola': case 'historial': case 'catalogo': valido = true; break;
+    case 'hola': case 'historial': case 'catalogo': case 'soltar': valido = true; break;
     case 'explorar': valido = texto('ruta') && (m.ruta as string).length <= 4096; break;
     case 'limites': valido = m.fresco === undefined || typeof m.fresco === 'boolean'; break;
     case 'foco': valido = typeof m.visible === 'boolean'; break;

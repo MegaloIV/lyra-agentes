@@ -1,5 +1,5 @@
 // Codex por `codex app-server` (JSON-RPC v2 por stdio). Un solo proceso atiende a todos los hilos.
-import type { Bloque, Comando, InfoProveedor, Limite, Modelo, PermissionMode, Sesion, Solicitud, Ventana } from './protocolo.ts';
+import type { Bloque, Comando, InfoProveedor, Limite, Modelo, PermissionMode, Progreso, Sesion, Solicitud, Ventana } from './protocolo.ts';
 import { ClienteRpc } from './rpc.ts';
 import { cadena, objeto } from './resumenes.ts';
 import { bloquesDeItem, bloquesDeHilo, comandoLimpio, finDeTurno, lineasDiff, tareasDePlan } from './normalizarCodex.ts';
@@ -116,6 +116,12 @@ export async function historialCodex(): Promise<Sesion[]> {
     cwd: cadena(t.cwd), modificado: (Number(t.updatedAt) || 0) * 1000, rama: cadena(objeto(t.gitInfo).branch) || undefined }));
 }
 
+/** El archivo donde Codex guarda el hilo (para ver cuándo cambia) */
+export async function rutaCodex(threadId: string): Promise<string | undefined> {
+  const r = await (await conexion()).pedir<P>('thread/read', { threadId, includeTurns: false });
+  return cadena(objeto(r.thread).path) || undefined;
+}
+
 export async function archivarCodex(threadId: string) { await (await conexion()).pedir('thread/archive', { threadId }); }
 export async function renombrarCodex(threadId: string, name: string) { await (await conexion()).pedir('thread/name/set', { threadId, name }); }
 
@@ -134,6 +140,15 @@ export class MotorCodex implements Motor {
   private cambios = { modo: false, modelo: false, esfuerzo: false };
   private ctx: Contexto;
   private a: Agente;
+  /** Contador del turno: tokens de salida que informó Codex (total del hilo, y el que tenía al empezar el turno)
+   *  más lo que llegó escrito desde entonces (4 caracteres ≈ 1 token) */
+  private salida?: number;
+  private base?: number;
+  private caracteres = 0;
+  private contar(fase?: Progreso['fase'], texto = '') {
+    this.caracteres += texto.length;
+    this.ctx.progreso(this.a, Math.max(0, (this.salida ?? 0) - (this.base ?? this.salida ?? 0)) + Math.ceil(this.caracteres / 4), fase);
+  }
   constructor(ctx: Contexto, a: Agente) {
     this.ctx = ctx; this.a = a;}
 
@@ -192,7 +207,8 @@ export class MotorCodex implements Motor {
     const a = this.a, ctx = this.ctx;
     if (a.cerrado) return;
     switch (metodo) {
-      case 'turn/started': this.turno = cadena(objeto(p.turn).id); break;
+      case 'turn/started': this.turno = cadena(objeto(p.turn).id); this.base = this.salida; this.caracteres = 0; this.contar('pensando'); break;
+      case 'item/reasoning/summaryTextDelta': case 'item/reasoning/textDelta': this.contar('pensando', cadena(p.delta)); break;
       case 'item/started': case 'item/completed': {
         const recibido = objeto(p.item), id = cadena(recibido.id);
         const anterior = this.items.get(id);
@@ -202,6 +218,7 @@ export class MotorCodex implements Motor {
           if (metodo === 'item/completed' && typeof item.durationMs !== 'number') item.durationMs = Date.now() - Number(item.inicio);
         }
         if (item.type === 'userMessage') return;   // ya está: lo puso enviar()
+        if (metodo === 'item/started' && item.type !== 'agentMessage' && item.type !== 'reasoning' && item.type !== 'plan') this.contar('herramienta');
         if (item.type === 'fileChange' || item.type === 'commandExecution') this.items.set(id, item);
         const bloques = bloquesDeItem(item, a.cwd).map(b => b.tipo === 'texto' ? { ...b, enCurso: metodo === 'item/started' } : b);
         ctx.ops(a, bloques.map(b => a.bloques.some(x => x.id === b.id) ? { op: 'actualizar' as const, id: b.id, cambios: (({ id: _i, tipo: _t, ...resto }) => resto)(b as Bloque & P) } : { op: 'agregar' as const, bloque: b }));
@@ -220,6 +237,7 @@ export class MotorCodex implements Motor {
         const id = cadena(p.itemId);
         if (!a.bloques.some(b => b.id === id)) ctx.ops(a, [{ op: 'agregar', bloque: { tipo: 'texto', id, md: '', enCurso: true } }]);
         ctx.ops(a, [{ op: 'delta', id, md: cadena(p.delta) }]);
+        this.contar('escribiendo', cadena(p.delta));
         break;
       }
       case 'turn/plan/updated': {
@@ -229,7 +247,13 @@ export class MotorCodex implements Motor {
       }
       case 'thread/name/updated': if (cadena(p.threadName)) { a.titulo = cadena(p.threadName).slice(0, 80); ctx.barra(); } break;
       case 'thread/tokenUsage/updated': {
-        const uso = objeto(p.tokenUsage), ultimo = objeto(uso.last);
+        const uso = objeto(p.tokenUsage), ultimo = objeto(uso.last), total = objeto(uso.total);
+        if (typeof total.outputTokens === 'number') {
+          // Si el turno empezó sin saber el total (hilo recién retomado), lo de antes es el total menos este último pedido
+          if (this.turno && this.base === undefined) this.base = total.outputTokens - (typeof ultimo.outputTokens === 'number' ? ultimo.outputTokens : 0);
+          this.salida = total.outputTokens; this.caracteres = 0;
+          if (this.turno) this.contar();
+        }
         if (typeof uso.modelContextWindow === 'number' && typeof ultimo.totalTokens === 'number') { a.contexto = { usados: ultimo.totalTokens, total: uso.modelContextWindow }; ctx.barra(); }
         break;
       }
@@ -238,7 +262,7 @@ export class MotorCodex implements Motor {
         const t = objeto(p.turn);
         // Los textos que quedaron abiertos se cierran
         ctx.ops(a, a.bloques.filter(b => b.tipo === 'texto' && b.enCurso).map(b => ({ op: 'actualizar' as const, id: b.id, cambios: { enCurso: false } })));
-        ctx.ops(a, [{ op: 'agregar', bloque: finDeTurno(t, legible) }]);
+        ctx.ops(a, [{ op: 'agregar', bloque: { ...finDeTurno(t, legible), tokens: a.progreso?.tokens || undefined } }]);
         this.turno = undefined;
         ctx.estado(a, a.pendientes.size ? 'esperando' : 'listo');
         this.siguiente();

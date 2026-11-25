@@ -225,13 +225,15 @@ export function elegir(vista: Vista) {
   try { sessionStorage.setItem('lyra-vista', JSON.stringify(vista)); } catch {}
   if (vista?.tipo === 'agente') {
     enviar({ t: 'leer', agente: vista.id });
-    if (!estado.comandos.has(vista.id)) enviar({ t: 'comandos', agente: vista.id });
+    if (!estado.comandos.get(vista.id)?.length) enviar({ t: 'comandos', agente: vista.id });
   }
   if (vista?.tipo === 'sesion') {
     const abierto = estado.agentes.find(a => a.sessionId === vista.sessionId);
     if (abierto) return elegir({ tipo: 'agente', id: abierto.id });
-    if (!estado.documentos.has(vista.sessionId)) enviar({ t: 'abrirSesion', sessionId: vista.sessionId, cwd: vista.cwd, proveedor: vista.proveedor });
+    // Siempre se pide: así llega al día y el servidor la sigue mientras se mira (otra terminal puede estar usándola)
+    enviar({ t: 'abrirSesion', sessionId: vista.sessionId, cwd: vista.cwd, proveedor: vista.proveedor });
   }
+  if (!vista) enviar({ t: 'soltar' });
   avisar();
 }
 
@@ -311,7 +313,10 @@ function conectar() {
   if (!token) { estado.rechazado = true; avisar(); return; }
   const s = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?t=${encodeURIComponent(token)}`);
   ws = s;
-  s.onopen = () => { estado.conectado = true; espera = 1000; s.send(JSON.stringify({ t: 'hola' })); pedirLimites(); avisarFoco(); avisar(); };
+  s.onopen = () => { estado.conectado = true; espera = 1000; s.send(JSON.stringify({ t: 'hola' })); pedirLimites(); avisarFoco();
+    // La conversación del historial que se estaba mirando: llega al día y se vuelve a seguir
+    const v = estado.vista; if (v?.tipo === 'sesion') s.send(JSON.stringify({ t: 'abrirSesion', sessionId: v.sessionId, cwd: v.cwd, proveedor: v.proveedor }));
+    avisar(); };
   s.onmessage = e => { try { recibir(JSON.parse(String(e.data)) as ServidorMensaje); } catch {} };
   s.onclose = e => {
     estado.conectado = false; ws = null;

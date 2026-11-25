@@ -213,7 +213,7 @@ button { cursor: pointer; }
   display: none; border: 1px solid var(--borde); background: var(--superficie);
   border-radius: var(--radio-chico); padding: .2rem .55rem;
 }
-.lectura-titulos { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.lectura-titulos { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .lectura-titulo {
   margin: 0; font-size: 1rem; font-weight: 600; color: var(--texto-fuerte);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1226,3 +1226,48 @@ details.cuadro[open] > .cuadro-cabecera .carpeta-flecha::before, .cuadro[data-ab
 .consola-pantalla .xterm { height: 100%; }
 .consola-pantalla .xterm-viewport { scrollbar-width: thin; }
 .consolas-otras { margin: .2rem .8rem 0; font-size: .74rem; color: var(--tenue); }
+
+/* ── Contador del turno (abajo, junto al botón de enviar) ── */
+.contador { color: var(--apagado); }
+.contador-datos { color: var(--tenue); font-variant-numeric: tabular-nums; }
+
+/* ── Salida de los comandos de Claude Code (/context, /usage…) ── */
+.comando-salida { margin: .9rem 0; padding: .8rem 1rem .9rem; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie); }
+.comando-cabecera { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .7rem; font-size: .85rem; color: var(--apagado); }
+.comando-cabecera code { font-family: var(--mono); color: var(--lima); background: none; padding: 0; }
+.comando-texto { margin: 0; font: .8rem/1.5 var(--mono); color: var(--texto); white-space: pre-wrap; overflow-wrap: anywhere; }
+.comando-md { font-size: .88rem; }
+.comando-detalle { margin-top: .8rem; }
+.comando-detalle summary { cursor: pointer; font-size: .82rem; color: var(--apagado); }
+.comando-detalle[open] summary { margin-bottom: .5rem; }
+
+.ctx { display: flex; flex-wrap: wrap; gap: 1.1rem 1.6rem; align-items: flex-start; }
+.ctx-cuadricula { display: grid; grid-template-columns: repeat(10, 13px); gap: 3px; flex: none; }
+.ctx-cuadro { width: 13px; height: 13px; border-radius: 3px; }
+.ctx-cuadro[data-clase="libre"] { border: 1px solid var(--borde-fuerte); }
+.ctx-cuadro[data-clase="reserva"] { background: repeating-linear-gradient(135deg, var(--borde-fuerte) 0 2px, transparent 2px 4px); }
+.ctx-leyenda { flex: 1 1 15rem; min-width: 0; font-size: .85rem; }
+.ctx-total { margin: 0 0 .5rem; color: var(--apagado); }
+.ctx-total strong { color: var(--texto-fuerte); font-size: 1.05rem; }
+.ctx-modelo { margin-left: .6rem; font: .75rem var(--mono); color: var(--tenue); }
+.ctx-leyenda ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+.ctx-leyenda li { display: grid; grid-template-columns: .7rem 1fr auto 3.6rem; gap: .5rem; align-items: center; }
+.ctx-leyenda li[data-clase] .ctx-nombre { color: var(--apagado); }
+.ctx-punto { width: .65rem; height: .65rem; border-radius: 2px; }
+.ctx-punto[data-clase="libre"] { border: 1px solid var(--borde-fuerte); }
+.ctx-punto[data-clase="reserva"] { background: repeating-linear-gradient(135deg, var(--borde-fuerte) 0 2px, transparent 2px 4px); }
+.ctx-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-num, .ctx-pct { font-variant-numeric: tabular-nums; text-align: right; color: var(--apagado); }
+.ctx-pct { color: var(--tenue); }
+.ctx-nota { margin: .6rem 0 0; font-size: .78rem; color: var(--tenue); }
+
+.uso-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem; }
+.uso-fila { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr 3rem; gap: .3rem .8rem; align-items: center; font-size: .86rem; }
+.uso-barra { height: .55rem; border-radius: 99px; background: var(--superficie-2); border: 1px solid var(--borde); overflow: hidden; }
+.uso-barra span { display: block; height: 100%; background: var(--lima); border-radius: inherit; }
+.uso-fila[data-nivel="medio"] .uso-barra span { background: var(--amarillo); }
+.uso-fila[data-nivel="alto"] .uso-barra span { background: var(--rojo); }
+.uso-pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--texto-fuerte); }
+.uso-renueva { grid-column: 1 / -1; margin-top: -.2rem; font-size: .76rem; color: var(--tenue); }
+.comando-salida[data-clase="uso"] .comando-texto { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--borde); color: var(--apagado); }
+@media (max-width: 560px) { .uso-fila { grid-template-columns: 1fr 3rem; } .uso-barra { grid-column: 1 / -1; grid-row: 2; } }

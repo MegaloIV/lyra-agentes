@@ -6,7 +6,8 @@ import { detalleHerramienta } from '../../servidor/resumenes.ts';
 import { renderizar, renderizarLinea, encabezados } from '../md.ts';
 import { enviar, ver } from '../tienda.ts';
 import { Icono } from './iconos.tsx';
-import { contarAcciones, duracion, hora, lenguajeDe, textoPlano, type Herr } from '../util.ts';
+import { contarAcciones, duracion, hora, lenguajeDe, textoPlano, tokensCortos, type Herr } from '../util.ts';
+import { SalidaComando } from './Comando.tsx';
 
 type Usuario = Extract<Bloque, { tipo: 'usuario' }>;
 type Turno = { id: string; usuario?: Usuario; cuerpo: Bloque[] };
@@ -243,7 +244,7 @@ function TarjetaPlan({ b }: { b: Extract<Bloque, { tipo: 'plan' }> }) {
 }
 
 function Fin({ b }: { b: Extract<Bloque, { tipo: 'fin' }> }) {
-  const partes = [b.duracionMs ? duracion(b.duracionMs) : ''].filter(Boolean);
+  const partes = [b.duracionMs ? duracion(b.duracionMs) : '', b.tokens ? `↓ ${tokensCortos(b.tokens)} tokens` : ''].filter(Boolean);
   return (
     <>
       {b.error && <p class="aviso" data-nivel={b.error === 'Se detuvo antes de terminar.' ? 'info' : 'error'}>{b.error}</p>}
@@ -270,6 +271,7 @@ function Cuerpo({ bloques, hijos, cwd }: { bloques: Bloque[]; hijos: Hijos; cwd:
       case 'plan': salida.push(<TarjetaPlan key={b.id} b={b} />); break;
       case 'sistema': salida.push(<p key={b.id} class="aviso" data-nivel={b.nivel}>{b.texto}</p>); break;
       case 'fin': salida.push(<Fin key={b.id} b={b} />); break;
+      case 'comando': salida.push(<SalidaComando key={b.id} b={b} />); break;
       case 'usuario': salida.push(<Md key={b.id} texto={b.md} />); break;   // solo dentro de subagentes
     }
   }

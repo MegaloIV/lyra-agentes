@@ -7,6 +7,7 @@ import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn, type IPty } from 'node-pty';
 import type { Consola, ServidorMensaje } from './protocolo.ts';
+import { entornoLimpio } from './abrir.ts';
 
 const MAXIMO = 12;
 const MEMORIA = 200 * 1024;   // lo que se repite al volver a abrir una (como el scroll de la terminal)
@@ -33,7 +34,9 @@ export class Consolas {
     const carpeta = cwd || homedir();
     try { if (!(await stat(carpeta)).isDirectory()) throw new Error(); } catch { throw new Error('Esa carpeta ya no existe.'); }
     const id = randomUUID(), programa = shell();
-    const env: Record<string, string> = { ...process.env as Record<string, string>, TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'Lyra' };
+    // El entorno del escritorio (sin las variables de la terminal que lanzó el servidor) y sin el saludo de fish
+    // (Pokémon + fastfetch): la terminal aparece limpia, con solo el prompt
+    const env: Record<string, string> = { ...entornoLimpio() as Record<string, string>, TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'Lyra', SIN_SALUDO: '1' };
     const c: Viva = { id, cwd: carpeta, titulo: basename(programa), numero: ++this.serie, viva: true, memoria: '', pendiente: '' };
     this.lista.set(id, c);
     c.pty = spawn(programa, [], { name: 'xterm-256color', cols: limitar(cols, 20, 400), rows: limitar(rows, 4, 200), cwd: carpeta, env });

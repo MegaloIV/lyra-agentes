@@ -1,7 +1,7 @@
 // Lo que comparten los tres proveedores: el agente, lo que el gestor le ofrece a cada motor y lo que cada motor sabe hacer.
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import type { Bloque, ClienteMensaje, Comando, Op, PermissionMode, ResumenAgente } from './protocolo.ts';
+import type { Bloque, ClienteMensaje, Comando, Op, PermissionMode, Progreso, ResumenAgente } from './protocolo.ts';
 
 export type Respuesta = Extract<ClienteMensaje, { t: 'responder' }>;
 export type Pendiente = { responder: (r?: Respuesta) => void };
@@ -26,6 +26,8 @@ export interface Contexto {
   estado(a: Agente, estado: Agente['estado']): void;
   fallo(a: Agente, e: unknown): void;
   barra(): void;
+  /** Tokens que lleva el turno en curso y qué está haciendo (se avisa a la ventana como mucho dos veces por segundo) */
+  progreso(a: Agente, tokens: number, fase?: Progreso['fase']): void;
   /** Muestra una tarjeta (permiso, pregunta o plan) y llama a `al` cuando se responde; devuelve cómo cancelarla */
   solicitar(a: Agente, bloque: Extract<Bloque, { tipo: 'permiso' | 'pregunta' | 'plan' }>, al: (r?: Respuesta) => void): () => void;
 }

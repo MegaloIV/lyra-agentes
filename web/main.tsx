@@ -109,12 +109,12 @@ function leerBarra(): number { try { const n = Number(localStorage.getItem('lyra
  *  hasta el botón «tamaños de siempre» (o doble clic en el borde) */
 const PANEL = BARRA;
 type Anchos = Partial<Record<Exclude<Panel, null>, number>>;
-/** El panel crece mientras el nombre de la sesión se siga viendo entero en la cabecera (a uno muy largo se le dejan 380 px).
- *  Se mide con el panel en `actual` px: lo que sobra al lado del título es lo que todavía puede crecer */
+/** El panel crece hasta que el nombre de la sesión desaparece del todo de la cabecera (se va cortando con «…» por el camino).
+ *  Se mide con el panel en `actual` px: todo el ancho que ocupa la caja del título es lo que todavía puede crecer */
 function topePanel(actual: number): number {
-  const caja = document.querySelector<HTMLElement>('.lectura-titulos'), titulo = document.querySelector<HTMLElement>('.lectura-titulo');
-  if (!caja || !titulo) return Math.round(window.innerWidth * 0.6);
-  return Math.max(PANEL, Math.round(actual + caja.clientWidth - Math.min(titulo.scrollWidth, 380)));
+  const caja = document.querySelector<HTMLElement>('.lectura-titulos');
+  if (!caja) return Math.round(window.innerWidth * 0.6);
+  return Math.max(PANEL, Math.round(actual + caja.clientWidth));
 }
 function leerAnchos(): Anchos {
   try { const a = JSON.parse(localStorage.getItem('lyra-anchos-propios') || '{}'); return a && typeof a === 'object' ? a : {}; } catch { return {}; }
@@ -218,7 +218,7 @@ function App() {
   function arrastrarBorde(e: PointerEvent) {
     if (!panel || angosto) return;
     e.preventDefault();
-    const inicio = e.clientX, base = anchos[panel] ?? PANEL, p = panel, tope = Math.min(topePanel(ancho), window.innerWidth * 0.6);
+    const inicio = e.clientX, base = anchos[panel] ?? PANEL, p = panel, tope = topePanel(ancho);
     let ultimo = base;
     const mover = (ev: PointerEvent) => { ultimo = Math.round(Math.min(Math.max(base + inicio - ev.clientX, 200), tope)); setAnchos(a => ({ ...a, [p]: ultimo })); };
     const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); setAnchos(a => { guardarLocal('lyra-anchos-propios', a); return a; }); document.body.classList.remove('arrastrando'); };

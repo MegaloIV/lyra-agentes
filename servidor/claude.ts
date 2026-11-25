@@ -11,6 +11,7 @@ import { aplicarOps } from './protocolo.ts';
 import { crearNormalizador } from './normalizar.ts';
 import { Cola } from './cola.ts';
 import { leerFinal, SeguidorFondo } from './fondo.ts';
+import { ContadorTokens } from './tokens.ts';
 import { cadena } from './resumenes.ts';
 import type { Agente, Contexto, Motor } from './motor.ts';
 import { anotarLocal, entornoLocal, HERRAMIENTAS_LOCALES, asegurarOllama, modelosLocales } from './local.ts';
@@ -64,6 +65,19 @@ export function conEsfuerzoClaude(lista: Modelo[]): Modelo[] {
   });
 }
 
+/** Los comandos de Claude Code sin un agente abierto (para escribir «/» en una conversación del historial); se piden una vez */
+let comandosGuardados: Promise<Comando[]> | undefined;
+export function comandosClaude(): Promise<Comando[]> {
+  comandosGuardados ??= (async () => {
+    const vacia = new Cola<SDKUserMessage>();
+    const q = query({ prompt: vacia, options: { pathToClaudeCodeExecutable: EJECUTABLE, settingSources: ['user', 'project', 'local'], env: { ...process.env } } });
+    try { return (await Promise.race([q.supportedCommands(), new Promise<never>((_, mal) => setTimeout(() => mal(new Error('tiempo')), 20000))])).map(c => ({ nombre: c.name, descripcion: c.description })); }
+    finally { vacia.cerrar(); q.close(); }
+  })();
+  comandosGuardados.catch(() => { comandosGuardados = undefined; });
+  return comandosGuardados;
+}
+
 /** Los límites del plan de claude.ai (los mismos de /usage), de la API experimental del SDK */
 type Uso = Awaited<ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>>;
 const usoDe = (q: Query) => Promise.race([q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }), new Promise<never>((_, mal) => setTimeout(() => mal(new Error('tiempo')), 20000))]);
@@ -99,6 +113,8 @@ export class MotorClaude implements Motor {
   /** `local`: el mismo Claude Code, pero con un modelo de Ollama (servidor/local.ts) */
   private local: boolean;
   private fondo: SeguidorFondo;
+  /** Los tokens que va escribiendo en el turno, para el contador de abajo */
+  private tokens = new ContadorTokens();
   constructor(ctx: Contexto, a: Agente, normalizador?: ReturnType<typeof crearNormalizador>, local = false) {
     this.ctx = ctx; this.a = a; this.local = local; this.normalizador = normalizador || crearNormalizador(a.cwd);
     this.fondo = new SeguidorFondo(this.normalizador, ops => { if (!this.a.cerrado && ops.length) this.ctx.ops(this.a, ops); });
@@ -113,7 +129,7 @@ export class MotorClaude implements Motor {
   iniciar() {
     const a = this.a;
     this.consulta?.close(); this.abortar.abort(); this.cola.cerrar(); this.cerrarFondos();
-    this.abortar = new AbortController(); this.cola = new Cola(); a.cerrado = false;
+    this.abortar = new AbortController(); this.cola = new Cola(); a.cerrado = false; this.tokens.reiniciar();
     this.ctx.estado(a, 'iniciando');
     if (this.local) { void this.iniciarLocal(); return; }
     this.arrancar({ model: a.modelo, effort: a.esfuerzo as EffortLevel | undefined, settingSources: ['user', 'project', 'local'], env: { ...process.env } });
@@ -155,9 +171,15 @@ export class MotorClaude implements Motor {
           ctx.ops(a, ids.map(id => ({ op: 'actualizar', id, cambios: { enCola: false } })));
           if (!a.pendientes.size && a.estado !== 'trabajando') ctx.estado(a, 'trabajando');
         }
+        if (this.tokens.procesar(msg)) ctx.progreso(a, this.tokens.total, this.tokens.fase);
+        // Terminó un mensaje que pidió herramientas: mientras corren, el contador dice que está usándolas
+        if (msg.type === 'assistant' && !msg.parent_tool_use_id && Array.isArray(msg.message.content) && msg.message.content.some(c => c.type === 'tool_use')) { this.tokens.usandoHerramientas(); ctx.progreso(a, this.tokens.total, 'herramienta'); }
         const ops = this.normalizador.procesar(msg);
         ctx.ops(a, ops); this.fondo.revisar(ops);
         if (msg.type === 'result') {
+          // Lo que informó la API manda sobre lo estimado; el próximo turno empieza de cero
+          ctx.progreso(a, Math.max(this.tokens.total, msg.usage?.output_tokens || 0));
+          this.tokens.reiniciar();
           ctx.estado(a, a.pendientes.size ? 'esperando' : 'listo');
           // Título que Claude Code genera para la sesión (el mismo del historial)
           if (a.sessionId) void getSessionInfo(a.sessionId, { dir: a.cwd }).then(info => { const t = info?.customTitle || info?.summary; if (t && t !== a.titulo && t !== info?.firstPrompt) { a.titulo = t.slice(0, 80); ctx.barra(); } }).catch(() => {});

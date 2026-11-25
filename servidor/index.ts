@@ -17,8 +17,9 @@ import { vigilarBateria } from './bateria.ts';
 import type { Bateria } from './protocolo.ts';
 import { borrarArchivo } from './papelera.ts';
 import { guardarGrupos, leerGrupos, olvidarSesion } from './grupos.ts';
-import { avisarCuota, cerrarCodex, limiteCodex } from './codex.ts';
-import { avisarUsoClaude } from './claude.ts';
+import { avisarCuota, cerrarCodex, limiteCodex, rutaCodex } from './codex.ts';
+import { SeguidorSesiones } from './seguir.ts';
+import { avisarUsoClaude, comandosClaude } from './claude.ts';
 import { anotarLimite, limites, listaLimites } from './limites.ts';
 import { diffGit, estadoGit, infoGithub, registroPrueba } from './git.ts';
 import { memorias } from './memorias.ts';
@@ -41,6 +42,12 @@ const alAbrir = (id: string) => {
 };
 const gestor = new GestorAgentes(emitir, crearNotificador(visible, alAbrir), id => [...clientes.values()].some(c => c.agente === id && c.visible && Date.now() - c.fecha < 2000));
 const consolas = new Consolas(emitir);
+// Una conversación del historial que otra terminal sigue usando se vuelve a mandar cada vez que cambia su archivo
+const seguidor = new SeguidorSesiones(async (s, quienes) => {
+  if ([...gestor.agentes.values()].some(a => a.sessionId === s.sessionId)) return;   // ya la tiene Lyra abierta
+  const bloques = await gestor.cargar(s.proveedor, s.sessionId, s.cwd);
+  for (const ws of quienes) enviar(ws as WebSocket, { t: 'documento', agente: s.sessionId, bloques, soloLectura: true });
+}, rutaCodex);
 const mandarCatalogo = async (fresco = false) => emitir({ t: 'catalogo', proveedores: await catalogo(fresco) });
 // Codex avisa solo cuando cambia su cuota; Claude, al terminar cada turno
 const nuevoLimite = (l?: ReturnType<typeof limiteCodex>) => { if (l) { anotarLimite(l); emitir({ t: 'limites', ...listaLimites() }); } };
@@ -89,7 +96,7 @@ servidor.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, ws => {
     if (!validarConexion(token, url.searchParams.get('t'), req.headers.origin, puerto, desarrollo)) { ws.close(4401, 'Acceso no autorizado'); return; }
     clientes.set(ws, { visible: false, fecha: 0 });
-    ws.on('error', () => {}); ws.on('close', () => clientes.delete(ws));
+    ws.on('error', () => {}); ws.on('close', () => { clientes.delete(ws); seguidor.mirar(ws); });
     ws.on('message', async datos => {
       try {
         const m = validarMensaje(JSON.parse(datos.toString())), cliente = clientes.get(ws)!;
@@ -98,16 +105,18 @@ servidor.on('upgrade', (req, socket, head) => {
           case 'foco': cliente.visible = m.visible; cliente.fecha = Date.now(); break;
           case 'crear': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, modelo: m.modelo, esfuerzo: m.esfuerzo, modo: m.modo, prompt: m.prompt }); cliente.agente = a.id; break; }
           case 'reanudar': { const a = await gestor.crear({ cwd: m.cwd, proveedor: m.proveedor, prompt: m.texto, reanudar: m.sessionId }); cliente.agente = a.id; break; }
-          case 'abrirSesion': { const bloques = await gestor.cargar(m.proveedor || 'claude', m.sessionId, m.cwd); emitir({ t: 'documento', agente: m.sessionId, bloques, soloLectura: true }); break; }
+          case 'abrirSesion': { const bloques = await gestor.cargar(m.proveedor || 'claude', m.sessionId, m.cwd); emitir({ t: 'documento', agente: m.sessionId, bloques, soloLectura: true }); seguidor.mirar(ws, { proveedor: m.proveedor || 'claude', sessionId: m.sessionId, cwd: m.cwd }); break; }
+          case 'soltar': seguidor.mirar(ws); break;
           case 'enviar': gestor.enviar(m.agente, m.texto); break;
           case 'responder': gestor.responder(m); break;
           case 'cerrar': gestor.cerrar(m.agente); emitir({ t: 'historial', sesiones: await gestor.historial() }); break;
           case 'interrumpir': await gestor.obtener(m.agente).motor.interrumpir(); break;
-          case 'leer': { cliente.agente = m.agente; const a = gestor.agentes.get(m.agente); if (a) { a.sinLeer = false; gestor.barra(); } break; }
+          case 'leer': { seguidor.mirar(ws); cliente.agente = m.agente; const a = gestor.agentes.get(m.agente); if (a) { a.sinLeer = false; gestor.barra(); } break; }
           case 'modo': { const a = gestor.obtener(m.agente); await a.motor.modo(m.modo); gestor.barra(); break; }
           case 'modelo': { const a = gestor.obtener(m.agente); await a.motor.modelo(m.modelo ?? undefined); gestor.barra(); break; }
           case 'esfuerzo': { const a = gestor.obtener(m.agente); await a.motor.esfuerzo(m.esfuerzo ?? undefined); gestor.barra(); break; }
-          case 'comandos': emitir({ t: 'comandos', agente: m.agente, comandos: await gestor.obtener(m.agente).motor.comandos() }); break;
+          // «claude»: los de Claude Code sin un agente abierto
+          case 'comandos': enviar(ws, { t: 'comandos', agente: m.agente, comandos: m.agente === 'claude' && !gestor.agentes.has('claude') ? await comandosClaude() : await gestor.obtener(m.agente).motor.comandos() }); break;
           case 'catalogo': enviar(ws, { t: 'catalogo', proveedores: await catalogo(true) }); break;
           case 'limites': emitir({ t: 'limites', ...await limites(m.fresco) }); break;
           case 'abrir': await abrirCon(m.con, m.cwd); break;

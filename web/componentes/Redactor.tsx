@@ -5,7 +5,7 @@ import type { PermissionMode, Proveedor, ResumenAgente } from '@protocolo';
 import { estado, enviar, crearAgente, cambiarBorrador, explorar, type Vista } from '../tienda.ts';
 import { Desplegable } from './Acciones.tsx';
 import { Icono } from './iconos.tsx';
-import { PROVEEDORES, horaDe, info, miles, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
+import { PROVEEDORES, cronometro, horaDe, info, miles, tokensCortos, modeloDe, nombreCarpeta, nombreEsfuerzo, nombreModo, nombreProveedor, rutaCorta } from '../util.ts';
 
 const borradores = new Map<string, string>();
 const clave = (v: Vista) => v?.tipo === 'agente' ? v.id : v?.tipo === 'sesion' ? v.sessionId : 'nuevo';
@@ -15,6 +15,15 @@ const TEXTO_ESTADO: Record<string, string> = {
   error: 'Se detuvo por un error', listo: '', cerrado: '',
 };
 
+
+const FASES = { pensando: 'Pensando', escribiendo: 'Escribiendo', herramienta: 'Trabajando' } as const;
+/** «Pensando… 1m 23s · ↓ 2.3k tokens», como el contador de la terminal: el tiempo corre aquí y los tokens llegan del servidor */
+function Contador({ agente }: { agente: ResumenAgente }) {
+  const p = agente.progreso!, [, tic] = useState(0);
+  useEffect(() => { const r = setInterval(() => tic(x => x + 1), 1000); return () => clearInterval(r); }, []);
+  const accion = agente.estado === 'esperando' ? 'Esperando tu respuesta' : `${FASES[p.fase] || 'Trabajando'}…`;
+  return <span class="contador">{accion} <span class="contador-datos">{cronometro(Date.now() - p.inicio)}{p.tokens > 0 ? ` · ↓ ${tokensCortos(p.tokens)} tokens` : ''}</span></span>;
+}
 
 /** Un chip que abre una lista corta hacia arriba */
 function Chip({ id, abierto, setAbierto, texto, titulo, datos, children }: { id: string; abierto: string; setAbierto: (v: string) => void; texto: preact.ComponentChildren; titulo: string; datos?: Record<string, string | undefined>; children?: preact.ComponentChildren }) {
@@ -170,8 +179,18 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   if (nuevo && !estado.borrador.cwd) { const c = estado.agentes[0]?.cwd || estado.historial[0]?.cwd; if (c) estado.borrador.cwd = rutaCorta(c); }
 
   const trabajando = agente?.estado === 'trabajando' || agente?.estado === 'esperando';
-  const comandos = agente ? estado.comandos.get(agente.id) || [] : [];
+  // Sin agente abierto (una conversación del historial) sirven los de otro agente del mismo proveedor
+  const proveedorVista = agente?.proveedor || (vista?.tipo === 'sesion' ? vista.proveedor : undefined);
+  const comandos = (agente ? estado.comandos.get(agente.id) : undefined)?.length ? estado.comandos.get(agente!.id)!
+    : estado.agentes.filter(a => a.proveedor === proveedorVista).map(a => estado.comandos.get(a.id) || []).find(l => l.length)
+      || (proveedorVista === 'claude' ? estado.comandos.get('claude') : undefined) || [];
   const buscando = /^\/(\S*)$/.exec(texto);
+  // Si la lista llegó vacía (se pidió antes de que el agente terminara de arrancar) se vuelve a pedir al escribir «/»
+  useEffect(() => {
+    if (!buscando || comandos.length || (agente ? agente.proveedor === 'codex' : proveedorVista !== 'claude')) return;
+    const t = setTimeout(() => enviar({ t: 'comandos', agente: agente?.id || 'claude' }), 150);
+    return () => clearTimeout(t);
+  }, [!!buscando, agente?.id, agente?.estado, comandos.length]);
   const filtrados = buscando && !popupCerrado ? comandos.filter(c => c.nombre.replace(/^\//, '').toLowerCase().startsWith(buscando[1]!.toLowerCase())).slice(0, 30) : [];
   const indice = Math.min(elegido, Math.max(0, filtrados.length - 1));
   const b = estado.borrador, datosNuevo = nuevo ? info(b.proveedor) : undefined;
@@ -275,7 +294,7 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
           onKeyDown={tecla} onBlur={() => { prefijo.current = 0; }} />
         <div class="redactor-barra">
           <div class="ajustes"><Ajustes agente={agente} nuevo={nuevo} solo={vista?.tipo === 'sesion' ? vista.proveedor : undefined} /></div>
-          <span class="redactor-estado">{textoEstado}</span>
+          <span class="redactor-estado">{!avisoEsc && trabajando && agente?.progreso && !agente.progreso.fin ? <Contador agente={agente} /> : textoEstado}</span>
           {agente?.estado === 'error' && agente.sessionId && <button type="button" class="icono-boton" onClick={() => crearAgente({ t: 'reanudar', sessionId: agente.sessionId!, cwd: agente.cwd, proveedor: agente.proveedor })}><Icono nombre="recargar" /></button>}
           {trabajando && <button type="button" class="boton-detener" aria-label="Detener" onClick={() => agente && enviar({ t: 'interrumpir', agente: agente.id })}><Icono nombre="detener" /></button>}
           <button type="button" class="boton-enviar" aria-label="Enviar" disabled={!texto.trim() || !!falta} onClick={mandar}><Icono nombre="enviar" /></button>
