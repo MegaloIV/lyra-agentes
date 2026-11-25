@@ -23,10 +23,18 @@ ventana() {   # PID de la ventana, buscado por su línea de comandos (sin pgrep 
   done
 }
 
+servidor() {  # PID del servidor: el anotado o, si falta (lo arrancó otro), el que escucha en el puerto
+  local p
+  if [[ -f "$ESTADO/servidor.pid" ]] && p=$(cat "$ESTADO/servidor.pid") && kill -0 "$p" 2>/dev/null; then echo "$p"; return; fi
+  ss -Htlnp "sport = :$PUERTO" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2
+}
+
 case "${1:-}" in
   --detener)
-    if [[ -f "$ESTADO/servidor.pid" ]] && kill -0 "$(cat "$ESTADO/servidor.pid")" 2>/dev/null; then
-      kill "$(cat "$ESTADO/servidor.pid")" && echo "Servidor detenido."
+    p=$(servidor)
+    if [[ -n "$p" ]]; then
+      kill "$p" && for _ in $(seq 1 25); do kill -0 "$p" 2>/dev/null || break; sleep 0.2; done
+      echo "Servidor detenido."
     else echo "El servidor no estaba corriendo."; fi
     rm -f "$ESTADO/servidor.pid"; exit 0 ;;
   --cerrar) p=$(ventana); [[ -n "$p" ]] && kill $p; exit 0 ;;

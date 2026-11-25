@@ -288,8 +288,21 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
   }
   function recibirArchivos(datos: DataTransfer | null): boolean {
     if (!datos) return false;
-    const archivos = [...datos.files];
+    let archivos = [...datos.files];
+    if (!archivos.length) archivos = [...datos.items].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter((f): f is File => !!f);
     if (archivos.length) { void adjuntar(archivos); return true; }
+    // Una captura (Super+P) llega como image/png sin archivo en algunos WebKit: se lee del portapapeles
+    if (datos.types.some(t => t.startsWith('image/')) && navigator.clipboard?.read) {
+      void navigator.clipboard.read().then(async items => {
+        const imagenes: File[] = [];
+        for (const item of items) {
+          const tipo = item.types.find(t => t.startsWith('image/')); if (!tipo) continue;
+          imagenes.push(new File([await item.getType(tipo)], `captura.${tipo.split('/')[1] || 'png'}`, { type: tipo }));
+        }
+        if (imagenes.length) await adjuntar(imagenes); else mostrarError('No se pudo leer la imagen del portapapeles.');
+      }, () => mostrarError('No se pudo leer la imagen del portapapeles.'));
+      return true;
+    }
     const rutas = rutasPegadas(datos.getData('text/uri-list') || datos.getData('x-special/gnome-copied-files'));
     for (const ruta of rutas) agregarAdjunto(ruta, ruta.split('/').at(-1) || 'archivo', '', k);
     return rutas.length > 0;
