@@ -135,6 +135,8 @@ export async function cargarCodex(threadId: string, cwd: string): Promise<Bloque
 export class MotorCodex implements Motor {
   private hilo?: string;
   private turno?: string;
+  /** Se pidió detenerlo antes de que Codex dijera qué turno era: se detiene apenas se sepa */
+  private detenerAlEmpezar = false;
   private cola: { texto: string; id: string }[] = [];
   private items = new Map<string, P>();
   private cambios = { modo: false, modelo: false, esfuerzo: false };
@@ -172,7 +174,7 @@ export class MotorCodex implements Motor {
   }
 
   /** Se cayó el proceso compartido */
-  caido() { if (!this.a.cerrado) { this.turno = undefined; this.ctx.fallo(this.a, new Error('Codex se cerró. Puedes reanudar la sesión.')); } }
+  caido() { if (!this.a.cerrado) { this.turno = undefined; this.detenerAlEmpezar = false; this.ctx.fallo(this.a, new Error('Codex se cerró. Puedes reanudar la sesión.')); } }
 
   enviar(texto: string) {
     const ocupado = !this.hilo || !!this.turno, u = bloqueUsuario(texto, ocupado);
@@ -195,8 +197,9 @@ export class MotorCodex implements Motor {
     conexion().then(c => c.pedir<P>('turn/start', params)).then(r => {
       this.cambios = { modo: false, modelo: false, esfuerzo: false };
       const t = objeto(r.turn); if (this.turno === 'pendiente') this.turno = cadena(t.id);
+      this.detenerSiSePidio();
     }).catch(e => {
-      this.turno = undefined;
+      this.turno = undefined; this.detenerAlEmpezar = false;
       this.ctx.ops(a, [{ op: 'agregar', bloque: { tipo: 'fin', id: `fin-${id}`, error: legible(e instanceof Error ? e.message : String(e)) } }]);
       this.ctx.estado(a, 'listo');
     });
@@ -207,7 +210,7 @@ export class MotorCodex implements Motor {
     const a = this.a, ctx = this.ctx;
     if (a.cerrado) return;
     switch (metodo) {
-      case 'turn/started': this.turno = cadena(objeto(p.turn).id); this.base = this.salida; this.caracteres = 0; this.contar('pensando'); break;
+      case 'turn/started': this.turno = cadena(objeto(p.turn).id); this.base = this.salida; this.caracteres = 0; this.contar('pensando'); this.detenerSiSePidio(); break;
       case 'item/reasoning/summaryTextDelta': case 'item/reasoning/textDelta': this.contar('pensando', cadena(p.delta)); break;
       case 'item/started': case 'item/completed': {
         const recibido = objeto(p.item), id = cadena(recibido.id);
@@ -263,7 +266,7 @@ export class MotorCodex implements Motor {
         // Los textos que quedaron abiertos se cierran
         ctx.ops(a, a.bloques.filter(b => b.tipo === 'texto' && b.enCurso).map(b => ({ op: 'actualizar' as const, id: b.id, cambios: { enCurso: false } })));
         ctx.ops(a, [{ op: 'agregar', bloque: { ...finDeTurno(t, legible), tokens: a.progreso?.tokens || undefined } }]);
-        this.turno = undefined;
+        this.turno = undefined; this.detenerAlEmpezar = false;
         ctx.estado(a, a.pendientes.size ? 'esperando' : 'listo');
         this.siguiente();
         break;
@@ -319,8 +322,14 @@ export class MotorCodex implements Motor {
   private motivo(r?: Respuesta) { if (r?.decision === 'rechazar' && r.mensaje?.trim()) this.enviar(r.mensaje.trim()); }
 
   async interrumpir() {
-    if (!this.hilo || !this.turno || this.turno === 'pendiente') return;
+    if (!this.hilo || !this.turno) return;
+    if (this.turno === 'pendiente') { this.detenerAlEmpezar = true; return; }
     await (await conexion()).pedir('turn/interrupt', { threadId: this.hilo, turnId: this.turno });
+  }
+  private detenerSiSePidio() {
+    if (!this.detenerAlEmpezar || !this.turno || this.turno === 'pendiente') return;
+    this.detenerAlEmpezar = false;
+    void this.interrumpir().catch(() => {});
   }
   async modo(m: PermissionMode) { this.a.modo = m; this.cambios.modo = true; }
   async modelo(m?: string) { this.a.modelo = m; this.cambios.modelo = true; }
