@@ -340,6 +340,14 @@ export function Redactor({ vista, agente }: { vista: Vista; agente?: ResumenAgen
       prefijo.current = 0; return;
     }
     if (!['Control', 'Shift'].includes(e.key)) prefijo.current = 0;
+    // Ctrl+U: borra todo lo escrito y los adjuntos. Va como una edición, así Ctrl+Z lo recupera
+    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && letra === 'u') {
+      e.preventDefault();
+      const c = caja.current;
+      if (c && c.value) { c.focus(); c.select(); if (!document.execCommand('delete')) setTexto(''); }
+      archivosBorrador.delete(k); setAdjuntos([]);
+      return;
+    }
     if (e.ctrlKey && letra === 'c') {
       const c = caja.current;
       if (window.getSelection()?.toString() || (c && c.selectionStart !== c.selectionEnd)) return;
